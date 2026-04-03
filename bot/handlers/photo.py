@@ -21,7 +21,7 @@ from bot.services.stats import (
     format_today_meals_for_prompt,
 )
 from bot.services.vision.base import VisionProvider
-from bot.utils.formatters import format_signal
+from bot.utils.formatters import format_macros_range, format_signal
 
 logger = logging.getLogger(__name__)
 
@@ -157,39 +157,31 @@ async def handle_photo(
     lines = []
     description = parsed.get("description", "")
     if description:
-        lines.append(f"<b>{description}</b>\n")
+        lines.append(f"\U0001f37d <b>{description}</b>\n")
 
     # items with ranges
     for item in items_data:
         name = item.get("name", "?")
         g_lo = item.get("grams_min", 0)
         g_hi = item.get("grams_max", 0)
-        g_str = f" (~{_range_str(g_lo, g_hi)} г)" if g_hi else ""
-        lines.append(f"<b>{name}</b>{g_str}")
+        g_str = f" (~{_range_str(g_lo, g_hi)} \u0433)" if g_hi else ""
+        cal_str = _range_str(item.get("calories_min", 0), item.get("calories_max", 0))
+        lines.append(f"\u25aa <b>{name}</b>{g_str}")
         lines.append(
-            f"  Б: {_range_str(item.get('protein_min', 0), item.get('protein_max', 0))} г | "
-            f"Ж: {_range_str(item.get('fat_min', 0), item.get('fat_max', 0))} г | "
-            f"У: {_range_str(item.get('carbs_min', 0), item.get('carbs_max', 0))} г"
+            f"   \U0001f4aa {_range_str(item.get('protein_min', 0), item.get('protein_max', 0))} \u0433 | "
+            f"\U0001f9c8 {_range_str(item.get('fat_min', 0), item.get('fat_max', 0))} \u0433 | "
+            f"\U0001f33e {_range_str(item.get('carbs_min', 0), item.get('carbs_max', 0))} \u0433"
         )
-        lines.append(
-            f"  {_range_str(item.get('calories_min', 0), item.get('calories_max', 0))} ккал"
-        )
+        lines.append(f"   \U0001f525 {cal_str} \u043a\u043a\u0430\u043b")
 
     # total with ranges
-    lines.append("")
-    lines.append("<b>--- Итого ---</b>")
-    lines.append(
-        f"Калории: {_range_str(total.get('calories_min', 0), total.get('calories_max', 0))} ккал"
-    )
-    lines.append(
-        f"Белки: {_range_str(total.get('protein_min', 0), total.get('protein_max', 0))} г"
-    )
-    lines.append(
-        f"Жиры: {_range_str(total.get('fat_min', 0), total.get('fat_max', 0))} г"
-    )
-    lines.append(
-        f"Углеводы: {_range_str(total.get('carbs_min', 0), total.get('carbs_max', 0))} г"
-    )
+    lines.append("\n\U0001f4ca <b>\u0418\u0442\u043e\u0433\u043e</b>")
+    lines.append(format_macros_range(
+        total.get("calories_min", 0), total.get("calories_max", 0),
+        total.get("protein_min", 0), total.get("protein_max", 0),
+        total.get("fat_min", 0), total.get("fat_max", 0),
+        total.get("carbs_min", 0), total.get("carbs_max", 0),
+    ))
 
     # signals
     signals = parsed.get("signals", [])
@@ -198,35 +190,36 @@ async def handle_photo(
         for s in signals:
             lines.append(format_signal(s.get("level", "green"), s.get("text", "")))
 
-    # optimization tips (always shown)
+    # optimization tips
     optimization = parsed.get("optimization", [])
     if optimization:
-        lines.append("\n<b>Как улучшить:</b>")
+        lines.append(f"\n\U0001f527 <b>\u041a\u0430\u043a \u0443\u043b\u0443\u0447\u0448\u0438\u0442\u044c:</b>")
         for tip in optimization:
-            lines.append(f"- {tip}")
+            lines.append(f"\U0001f449 {tip}")
 
-    # day context (always shown)
+    # day context
     day_ctx = parsed.get("day_context")
     if day_ctx:
-        lines.append(f"\n<b>Контекст дня:</b> {day_ctx}")
+        lines.append(f"\n\U0001f4c5 <b>\u041a\u043e\u043d\u0442\u0435\u043a\u0441\u0442 \u0434\u043d\u044f:</b> {day_ctx}")
 
     # detailed mode extras
     analysis = parsed.get("analysis")
     if analysis:
-        lines.append(f"\n<b>Анализ:</b> {analysis}")
+        lines.append(f"\n\U0001f50d <b>\u0410\u043d\u0430\u043b\u0438\u0437:</b> {analysis}")
 
     tips = parsed.get("tips")
     if tips:
         lines.append("")
         for tip in tips:
-            lines.append(f"- {tip}")
+            lines.append(f"\U0001f4a1 {tip}")
 
-    # AI suggestions as dynamic buttons
+    # verdict
+    verdict = parsed.get("verdict")
+    if verdict:
+        lines.append(f"\n\U0001f4ac <b>Вердикт:</b> {verdict}")
+
+    # AI suggestions
     suggestions = parsed.get("suggestions", [])
-    if suggestions:
-        lines.append("\n<b>Могу помочь:</b>")
-        for s in suggestions:
-            lines.append(f"- {s.get('text', '')}")
 
     await message.answer(
         "\n".join(lines),
