@@ -221,8 +221,15 @@ async def handle_photo(
         for tip in tips:
             lines.append(f"- {tip}")
 
+    # AI suggestions as dynamic buttons
+    suggestions = parsed.get("suggestions", [])
+    if suggestions:
+        lines.append("\n<b>Могу помочь:</b>")
+        for s in suggestions:
+            lines.append(f"- {s.get('text', '')}")
+
     await message.answer(
         "\n".join(lines),
-        reply_markup=meal_result_keyboard(meal_log.id),
+        reply_markup=meal_result_keyboard(meal_log.id, suggestions),
         parse_mode="HTML",
     )

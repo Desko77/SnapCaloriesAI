@@ -340,3 +340,77 @@ async def cb_detail(
 
     await callback.message.answer("\n".join(lines), parse_mode="HTML")
     await callback.answer()
+
+
+# --- AI suggestion ---
+
+@router.callback_query(F.data.startswith("sug:"))
+async def cb_suggestion(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    user: User,
+    vision_provider: VisionProvider,
+):
+    parts = callback.data.split(":")
+    meal_id = int(parts[1])
+    sug_idx = int(parts[2])
+
+    meal = await _load_meal(session, meal_id, user.id)
+    if not meal:
+        await callback.answer("Запись не найдена")
+        return
+
+    # extract suggestion prompt from stored analysis
+    try:
+        analysis = json.loads(meal.ai_description) if meal.ai_description else {}
+        suggestions = analysis.get("suggestions", [])
+        suggestion = suggestions[sug_idx]
+    except (json.JSONDecodeError, IndexError, KeyError):
+        await callback.answer("Предложение недоступно")
+        return
+
+    await callback.answer("Генерирую...")
+    await callback.message.answer_chat_action(ChatAction.TYPING)
+
+    from bot.services.stats import (
+        get_today_totals,
+        get_today_meals,
+        get_weekly_summary_for_prompt,
+        format_today_meals_for_prompt,
+    )
+
+    user_goals = {
+        "calories": user.daily_calories_goal,
+        "protein": user.daily_protein_goal,
+        "fat": user.daily_fat_goal,
+        "carbs": user.daily_carbs_goal,
+    }
+    user_profile = {
+        "goal_type": user.goal_type,
+        "weight": user.weight,
+        "target_weight": user.target_weight,
+        "height": user.height,
+    }
+    today_totals = await get_today_totals(session, user.id)
+    today_meals_raw = await get_today_meals(session, user.id)
+    today_meals = format_today_meals_for_prompt(today_meals_raw)
+    weekly_summary = await get_weekly_summary_for_prompt(session, user.id)
+
+    prompt = render_prompt(
+        "execute_suggestion.j2",
+        suggestion_prompt=suggestion.get("prompt", suggestion.get("text", "")),
+        user_profile=user_profile,
+        user_goals=user_goals,
+        today_totals=today_totals,
+        today_meals=today_meals,
+        weekly_summary=weekly_summary,
+    )
+
+    try:
+        response = await vision_provider.analyze(None, prompt)
+    except Exception:
+        logger.exception("Suggestion execution failed")
+        await callback.message.answer("AI-сервис недоступен.")
+        return
+
+    await callback.message.answer(response, parse_mode=None)
