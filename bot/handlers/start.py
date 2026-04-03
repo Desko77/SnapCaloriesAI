@@ -21,7 +21,7 @@ async def cmd_start(message: Message):
         "/history - история за неделю\n"
         "/stats - статистика\n"
         "/report - AI-анализ питания за период\n"
-        "/goal - цели, вес, нормы КБЖУ\n"
+        "/profile - профиль и цели\n"
         "/settings - настройки\n"
         "/help - справка",
         parse_mode="HTML",

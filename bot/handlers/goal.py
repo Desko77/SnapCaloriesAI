@@ -114,7 +114,7 @@ def _goal_keyboard() -> InlineKeyboardMarkup:
     ])
 
 
-@router.message(Command("goal"))
+@router.message(Command("goal", "profile"))
 async def cmd_goal(message: Message, user: User):
     await message.answer(
         _goal_text(user) + "\n\nНажмите, чтобы изменить:",

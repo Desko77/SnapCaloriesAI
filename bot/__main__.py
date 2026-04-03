@@ -47,7 +47,7 @@ async def main():
         BotCommand(command="history", description="История за неделю"),
         BotCommand(command="stats", description="Статистика"),
         BotCommand(command="report", description="AI-анализ за период"),
-        BotCommand(command="goal", description="Цели и параметры"),
+        BotCommand(command="profile", description="Профиль и цели"),
         BotCommand(command="settings", description="Настройки"),
         BotCommand(command="help", description="Справка"),
     ])
