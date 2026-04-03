@@ -13,9 +13,9 @@ class OpenAICompatProvider(VisionProvider):
     """OpenAI-compatible provider. Works with OpenAI, LM Studio, Ollama, Qwen, etc."""
 
     def __init__(self):
-        if settings.openai_api_key or settings.openai_base_url:
+        if settings.openai_api_key:
             self._client = AsyncOpenAI(
-                api_key=settings.openai_api_key or "not-needed",
+                api_key=settings.openai_api_key,
                 base_url=settings.openai_base_url,
             )
         else:
