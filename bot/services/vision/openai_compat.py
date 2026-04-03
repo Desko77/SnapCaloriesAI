@@ -37,7 +37,10 @@ class OpenAICompatProvider(VisionProvider):
             model=settings.openai_model,
             messages=[{"role": "user", "content": content}],
         )
-        return response.choices[0].message.content
+        text = response.choices[0].message.content
+        if text is None:
+            raise RuntimeError(f"AI returned empty response (finish_reason={response.choices[0].finish_reason})")
+        return text
 
     async def is_available(self) -> bool:
         return self._client is not None

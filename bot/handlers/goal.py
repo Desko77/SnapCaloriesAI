@@ -6,20 +6,11 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from bot.constants import GOAL_TYPE_LABELS
 from bot.handlers.states import GoalEditState
 from bot.models.user import User
 
 router = Router()
-
-GOAL_TYPE_LABELS = {
-    "loss": "Похудение",
-    "maintain": "Поддержание веса",
-    "muscle": "Набор мышечной массы",
-    "gain": "Набор веса",
-    "recomp": "Рекомпозиция (жир->мышцы)",
-    "health": "Здоровое питание",
-    "energy": "Больше энергии",
-}
 
 KBJU_FIELDS = {
     "calories": ("daily_calories_goal", "Калории (ккал)"),

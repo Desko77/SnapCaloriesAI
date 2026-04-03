@@ -1,5 +1,6 @@
 import json
 import logging
+from datetime import datetime
 from pathlib import Path
 
 from aiogram import Bot, Router, F
@@ -24,18 +25,9 @@ from bot.utils.formatters import format_signal
 
 logger = logging.getLogger(__name__)
 
+from bot.constants import GOAL_TYPE_LABELS
+
 router = Router()
-
-GOAL_LABELS = {
-    "loss": "Похудение", "maintain": "Поддержание веса",
-    "muscle": "Набор мышечной массы", "gain": "Набор веса",
-    "recomp": "Рекомпозиция", "health": "Здоровое питание",
-    "energy": "Больше энергии",
-}
-
-
-def _goal_label(goal_type: str) -> str:
-    return GOAL_LABELS.get(goal_type, goal_type)
 
 
 def _avg(lo, hi):
@@ -67,10 +59,8 @@ async def handle_photo(
     # save photo to disk for future app usage
     photos_dir = Path("data/photos") / str(user.telegram_id)
     photos_dir.mkdir(parents=True, exist_ok=True)
-    from datetime import datetime
     photo_filename = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
     photo_path = photos_dir / photo_filename
-    photo_path.write_bytes(image_data)
 
     # build context
     user_goals = {
@@ -85,7 +75,7 @@ async def handle_photo(
     weekly_summary = await get_weekly_summary_for_prompt(session, user.id)
 
     user_profile = {
-        "goal_type": _goal_label(user.goal_type),
+        "goal_type": GOAL_TYPE_LABELS.get(user.goal_type, user.goal_type),
         "weight": user.weight,
         "target_weight": user.target_weight,
         "height": user.height,
@@ -123,6 +113,9 @@ async def handle_photo(
         logger.error("AI response missing required keys: %s", parsed)
         await message.answer("AI вернул неполный ответ. Попробуйте еще раз.")
         return
+
+    # save photo only after successful AI analysis
+    photo_path.write_bytes(image_data)
 
     # save to DB (average of ranges)
     cal_avg = _avg(total.get("calories_min", 0), total.get("calories_max", 0))

@@ -48,7 +48,10 @@ async def cb_save(
     meal.is_confirmed = True
     await session.commit()
 
-    await callback.message.edit_reply_markup(reply_markup=None)
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
     await callback.answer("Сохранено!")
 
 
@@ -67,7 +70,10 @@ async def cb_cancel(
     await session.delete(meal)
     await session.commit()
 
-    await callback.message.edit_reply_markup(reply_markup=None)
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
     await callback.answer("Отменено")
 
 
@@ -123,11 +129,17 @@ async def refine_process_text(
     try:
         raw = await vision_provider.analyze(None, prompt)
         parsed = parse_ai_response(raw)
+    except Exception:
+        logger.exception("Refine: AI call failed")
+        await message.answer("AI-сервис недоступен. Попробуйте позже.")
+        return
+
+    try:
         total = parsed["total"]
         items_data = parsed["items"]
-    except Exception:
-        logger.exception("Refine failed")
-        await message.answer("Не удалось пересчитать. Попробуйте еще раз.")
+    except KeyError:
+        logger.error("Refine: AI response missing keys: %s", parsed)
+        await message.answer("AI вернул неполный ответ. Попробуйте еще раз.")
         return
 
     # update meal totals
@@ -309,7 +321,7 @@ async def cb_detail(
         await callback.answer("Запись не найдена")
         return
 
-    total_cal = meal.total_calories or 1
+    total_cal = meal.total_calories
 
     lines = ["<b>Подробный анализ:</b>\n"]
     for item in meal.items:

@@ -1,3 +1,5 @@
+import json
+
 from aiogram import Router
 from aiogram.filters import Command
 from aiogram.types import Message
@@ -27,7 +29,6 @@ async def cmd_today(message: Message, session: AsyncSession, user: User):
             # try to extract short description
             if desc:
                 try:
-                    import json
                     desc = json.loads(desc).get("description", "")
                 except Exception:
                     desc = ""
