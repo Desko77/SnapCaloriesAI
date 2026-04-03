@@ -26,7 +26,7 @@ Telegram-бот для расчета калорий и макронутриен
 
 ```bash
 # клонировать
-git clone https://github.com/pocketgodru/SnapCalories.git
+git clone https://github.com/Desko77/SnapCalories.git
 cd SnapCalories
 
 # настроить
