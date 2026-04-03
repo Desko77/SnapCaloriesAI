@@ -1,5 +1,5 @@
 [project]
-name = "snapcalories"
+name = "snapcaloriesai"
 version = "0.1.0"
 description = "Telegram bot for calculating calories and macros from food photos"
 requires-python = ">=3.12"

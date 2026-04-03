@@ -1,4 +1,4 @@
-# SnapCalories
+# SnapCaloriesAI
 
 Telegram-бот для расчета КБЖУ по фотографиям еды с AI-анализом.
 

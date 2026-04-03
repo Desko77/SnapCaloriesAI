@@ -8,7 +8,7 @@ router = Router()
 @router.message(CommandStart())
 async def cmd_start(message: Message):
     await message.answer(
-        "SnapCalories - бот для расчета КБЖУ по фото.\n\n"
+        "SnapCaloriesAI - бот для расчета КБЖУ по фото.\n\n"
         "Отправь фото еды, и я рассчитаю калории, белки, жиры и углеводы.\n\n"
         "Команды:\n"
         "/today - итого за сегодня\n"

@@ -1,4 +1,4 @@
-# SnapCalories
+# SnapCaloriesAI
 
 Telegram-бот для расчета калорий и макронутриентов (КБЖУ) по фотографиям еды с помощью AI.
 
@@ -26,8 +26,8 @@ Telegram-бот для расчета калорий и макронутриен
 
 ```bash
 # клонировать
-git clone https://github.com/Desko77/SnapCalories.git
-cd SnapCalories
+git clone https://github.com/Desko77/SnapCaloriesAI.git
+cd SnapCaloriesAI
 
 # настроить
 cp .env.example .env
