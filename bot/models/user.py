@@ -15,10 +15,14 @@ class User(Base):
     first_name: Mapped[str] = mapped_column(String(255), default="")
     last_name: Mapped[str | None] = mapped_column(String(255))
 
+    age: Mapped[int | None] = mapped_column(Integer)
+    gender: Mapped[str | None] = mapped_column(String(10))  # male / female
     weight: Mapped[float | None] = mapped_column(Float)
     height: Mapped[float | None] = mapped_column(Float)
+    activity_level: Mapped[str | None] = mapped_column(String(20))  # sedentary / light / moderate / active / athlete
+    activity_description: Mapped[str | None] = mapped_column(String(500))  # свободное описание
     target_weight: Mapped[float | None] = mapped_column(Float)
-    goal_type: Mapped[str] = mapped_column(String(20), default="maintain")  # loss / gain / maintain
+    goal_type: Mapped[str] = mapped_column(String(20), default="maintain")
     goal_deadline: Mapped[date | None] = mapped_column(Date)
 
     daily_calories_goal: Mapped[int] = mapped_column(Integer, default=2000)

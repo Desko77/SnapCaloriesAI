@@ -76,9 +76,12 @@ async def handle_photo(
 
     user_profile = {
         "goal_type": GOAL_TYPE_LABELS.get(user.goal_type, user.goal_type),
+        "gender": user.gender,
+        "age": user.age,
         "weight": user.weight,
-        "target_weight": user.target_weight,
         "height": user.height,
+        "target_weight": user.target_weight,
+        "activity": user.activity_level or user.activity_description,
     }
 
     prompt = render_prompt(

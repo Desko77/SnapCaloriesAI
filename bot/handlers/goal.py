@@ -20,26 +20,54 @@ KBJU_FIELDS = {
 }
 
 BODY_FIELDS = {
+    "age": ("age", "Возраст"),
     "weight": ("weight", "Текущий вес (кг)"),
     "height": ("height", "Рост (см)"),
     "target_weight": ("target_weight", "Целевой вес (кг)"),
     "deadline": ("goal_deadline", "Срок (ДД.ММ.ГГГГ)"),
+    "activity_desc": ("activity_description", "Образ жизни (своими словами)"),
 }
 
 ALL_FIELDS = {**KBJU_FIELDS, **BODY_FIELDS}
 
+ACTIVITY_LABELS = {
+    "sedentary": "Сидячий (офис, мало движения)",
+    "light": "Легкий (прогулки, легкая активность)",
+    "moderate": "Умеренный (тренировки 2-3 раза/нед)",
+    "active": "Активный (тренировки 4-5 раз/нед)",
+    "athlete": "Спортсмен (ежедневные тренировки)",
+}
+
+GENDER_LABELS = {
+    "male": "Мужской",
+    "female": "Женский",
+}
+
 
 def _goal_text(user: User) -> str:
     goal_label = GOAL_TYPE_LABELS.get(user.goal_type, "Не задана")
-    lines = [f"<b>Цель:</b> {goal_label}"]
+    lines = [f"\U0001f3af <b>Цель:</b> {goal_label}"]
+
+    # profile
+    profile_parts = []
+    if user.gender:
+        profile_parts.append(GENDER_LABELS.get(user.gender, user.gender))
+    if user.age:
+        profile_parts.append(f"{user.age} лет")
+    if profile_parts:
+        lines.append(f"\U0001f464 {', '.join(profile_parts)}")
 
     if user.weight:
-        w = f"Текущий вес: {user.weight:.1f} кг"
+        w = f"\u2696\ufe0f Вес: {user.weight:.1f} кг"
         if user.target_weight:
-            w += f" | Целевой: {user.target_weight:.1f} кг"
+            w += f" \u2192 {user.target_weight:.1f} кг"
         lines.append(w)
     if user.height:
-        lines.append(f"Рост: {user.height:.0f} см")
+        lines.append(f"\U0001f4cf Рост: {user.height:.0f} см")
+    if user.activity_level:
+        lines.append(f"\U0001f3c3 {ACTIVITY_LABELS.get(user.activity_level, user.activity_level)}")
+    elif user.activity_description:
+        lines.append(f"\U0001f3c3 {user.activity_description}")
     if user.goal_deadline:
         lines.append(f"Срок: до {user.goal_deadline.strftime('%d.%m.%Y')}")
 
@@ -57,18 +85,26 @@ def _goal_text(user: User) -> str:
 def _goal_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text="Тип цели", callback_data="goal:goal_type"),
-            InlineKeyboardButton(text="Вес", callback_data="goal:weight"),
+            InlineKeyboardButton(text="\U0001f464 Пол", callback_data="goal:gender"),
+            InlineKeyboardButton(text="\U0001f382 Возраст", callback_data="goal:age"),
+        ],
+        [
+            InlineKeyboardButton(text="\u2696\ufe0f Вес", callback_data="goal:weight"),
+            InlineKeyboardButton(text="\U0001f4cf Рост", callback_data="goal:height"),
+        ],
+        [
+            InlineKeyboardButton(text="\U0001f3c3 Активность", callback_data="goal:activity"),
+            InlineKeyboardButton(text="\U0001f3af Тип цели", callback_data="goal:goal_type"),
         ],
         [
             InlineKeyboardButton(text="Целевой вес", callback_data="goal:target_weight"),
-            InlineKeyboardButton(text="Рост", callback_data="goal:height"),
-        ],
-        [
             InlineKeyboardButton(text="Срок", callback_data="goal:deadline"),
         ],
         [
-            InlineKeyboardButton(text="Калории", callback_data="goal:calories"),
+            InlineKeyboardButton(text="Образ жизни (текст)", callback_data="goal:activity_desc"),
+        ],
+        [
+            InlineKeyboardButton(text="\U0001f525 Калории", callback_data="goal:calories"),
             InlineKeyboardButton(text="Белки", callback_data="goal:protein"),
         ],
         [
@@ -120,13 +156,65 @@ async def cb_set_goal_type(
     await callback.answer(f"Установлено: {label}")
 
 
-# --- numeric/date fields ---
+# --- gender selection ---
+
+@router.callback_query(F.data == "goal:gender")
+async def cb_gender(callback: CallbackQuery):
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=label, callback_data=f"setgender:{key}")]
+        for key, label in GENDER_LABELS.items()
+    ])
+    await callback.message.answer("Выберите пол:", reply_markup=kb)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("setgender:"))
+async def cb_set_gender(callback: CallbackQuery, session: AsyncSession, user: User):
+    gender = callback.data.split(":")[1]
+    if gender not in GENDER_LABELS:
+        await callback.answer("Неизвестный вариант")
+        return
+    user.gender = gender
+    await session.commit()
+    await callback.message.answer(
+        _goal_text(user), reply_markup=_goal_keyboard(), parse_mode="HTML",
+    )
+    await callback.answer(f"Пол: {GENDER_LABELS[gender]}")
+
+
+# --- activity level selection ---
+
+@router.callback_query(F.data == "goal:activity")
+async def cb_activity(callback: CallbackQuery):
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=label, callback_data=f"setactivity:{key}")]
+        for key, label in ACTIVITY_LABELS.items()
+    ])
+    await callback.message.answer("Выберите уровень активности:", reply_markup=kb)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("setactivity:"))
+async def cb_set_activity(callback: CallbackQuery, session: AsyncSession, user: User):
+    level = callback.data.split(":")[1]
+    if level not in ACTIVITY_LABELS:
+        await callback.answer("Неизвестный вариант")
+        return
+    user.activity_level = level
+    await session.commit()
+    await callback.message.answer(
+        _goal_text(user), reply_markup=_goal_keyboard(), parse_mode="HTML",
+    )
+    await callback.answer(f"Активность: {ACTIVITY_LABELS[level]}")
+
+
+# --- numeric/date/text fields ---
 
 @router.callback_query(F.data.startswith("goal:"))
 async def cb_goal_edit(callback: CallbackQuery, state: FSMContext):
     param = callback.data.split(":")[1]
-    if param == "goal_type":
-        return  # handled above
+    if param in ("goal_type", "gender", "activity"):
+        return  # handled by specific handlers above
     if param not in ALL_FIELDS:
         await callback.answer("Неизвестный параметр")
         return
@@ -160,8 +248,11 @@ async def goal_process_value(
     attr, label = ALL_FIELDS[param]
     text = message.text.strip()
 
+    # text fields (free-form)
+    if param == "activity_desc":
+        setattr(user, attr, text[:500])
     # parse deadline as date
-    if param == "deadline":
+    elif param == "deadline":
         try:
             parsed_date = datetime.strptime(text, "%d.%m.%Y").date()
             if parsed_date <= date.today():
@@ -177,8 +268,8 @@ async def goal_process_value(
             value = float(text)
             if value <= 0:
                 raise ValueError
-            # integer fields for KBJU
-            if param in KBJU_FIELDS:
+            # integer fields for KBJU and age
+            if param in KBJU_FIELDS or param == "age":
                 value = int(value)
             setattr(user, attr, value)
         except (ValueError, TypeError):

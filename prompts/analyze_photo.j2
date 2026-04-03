@@ -16,9 +16,12 @@
 {% if user_profile %}
 Профиль пользователя:
 - Цель: {{ user_profile.goal_type }}
+{% if user_profile.gender %}- Пол: {{ user_profile.gender }}{% endif %}
+{% if user_profile.age %}- Возраст: {{ user_profile.age }}{% endif %}
 {% if user_profile.weight %}- Вес: {{ user_profile.weight }} кг{% endif %}
-{% if user_profile.target_weight %}- Целевой вес: {{ user_profile.target_weight }} кг{% endif %}
 {% if user_profile.height %}- Рост: {{ user_profile.height }} см{% endif %}
+{% if user_profile.target_weight %}- Целевой вес: {{ user_profile.target_weight }} кг{% endif %}
+{% if user_profile.activity %}- Активность: {{ user_profile.activity }}{% endif %}
 {% endif %}
 
 {% if user_goals %}
