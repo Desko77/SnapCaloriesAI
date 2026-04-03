@@ -218,6 +218,20 @@ async def handle_photo(
     if verdict:
         lines.append(f"\n\U0001f4ac <b>Вердикт:</b> {verdict}")
 
+    # comparison
+    comparison = parsed.get("comparison", [])
+    if comparison:
+        rating_icons = {
+            "fire": "\U0001f525",
+            "good": "\u2705",
+            "warning": "\u26a0\ufe0f",
+            "bad": "\u274c",
+        }
+        lines.append(f"\n\u2696\ufe0f <b>Сравнение:</b>")
+        for c in comparison:
+            icon = rating_icons.get(c.get("rating", "good"), "\u2753")
+            lines.append(f"{icon} <b>{c.get('variant', '?')}</b> - {c.get('comment', '')}")
+
     # AI suggestions
     suggestions = parsed.get("suggestions", [])
 
