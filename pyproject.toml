@@ -1,0 +1,22 @@
+[project]
+name = "snapcalories"
+version = "0.1.0"
+description = "Telegram bot for calculating calories and macros from food photos"
+requires-python = ">=3.12"
+dependencies = [
+    "aiogram>=3.15",
+    "google-genai>=1.0",
+    "openai>=1.60",
+    "sqlalchemy[asyncio]>=2.0",
+    "aiosqlite>=0.20",
+    "alembic>=1.14",
+    "pydantic-settings>=2.7",
+    "jinja2>=3.1",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["bot"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

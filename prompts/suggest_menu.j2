@@ -1,0 +1,35 @@
+Ты - профессиональный нутрициолог. Предложи варианты следующего приема пищи.
+
+Цели пользователя на день:
+- Калории: {{ user_goals.calories }} ккал
+- Белки: {{ user_goals.protein }} г
+- Жиры: {{ user_goals.fat }} г
+- Углеводы: {{ user_goals.carbs }} г
+
+Уже съедено сегодня:
+- Калории: {{ today_totals.calories }} ккал
+- Белки: {{ today_totals.protein }} г
+- Жиры: {{ today_totals.fat }} г
+- Углеводы: {{ today_totals.carbs }} г
+
+Осталось:
+- Калории: {{ user_goals.calories - today_totals.calories }} ккал
+- Белки: {{ user_goals.protein - today_totals.protein }} г
+- Жиры: {{ user_goals.fat - today_totals.fat }} г
+- Углеводы: {{ user_goals.carbs - today_totals.carbs }} г
+
+Предложи 2-3 варианта приема пищи, которые помогут закрыть оставшийся бюджет КБЖУ.
+
+Ответ строго в формате JSON:
+{
+  "suggestions": [
+    {
+      "name": "Название варианта",
+      "description": "Краткое описание",
+      "calories": 400,
+      "protein": 30,
+      "fat": 15,
+      "carbs": 40
+    }
+  ]
+}
