@@ -19,7 +19,7 @@ def meal_result_keyboard(
     # dynamic AI suggestions
     if suggestions:
         for i, s in enumerate(suggestions[:3]):
-            text = s.get("text", "")[:40]
+            text = s.get("text", "")[:32]
             rows.append([
                 InlineKeyboardButton(text=text, callback_data=f"sug:{meal_id}:{i}")
             ])
