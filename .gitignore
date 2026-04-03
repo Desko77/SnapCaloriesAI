@@ -8,4 +8,5 @@ data/
 test/
 .idea/
 .vscode/
+.claude/
 *.swp
