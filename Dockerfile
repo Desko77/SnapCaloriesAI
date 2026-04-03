@@ -14,4 +14,4 @@ COPY alembic.ini .
 
 RUN mkdir -p data
 
-CMD ["uv", "run", "python", "-m", "bot"]
+CMD ["sh", "-c", "uv run alembic upgrade head && uv run python -m bot"]
