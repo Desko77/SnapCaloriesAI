@@ -55,7 +55,7 @@ async def cb_report(
 
     period_label, days = PERIODS[period_key]
     await callback.answer(f"Генерирую отчет за {period_label.lower()}...")
-    await callback.message.answer_chat_action(ChatAction.TYPING)
+    await callback.bot.send_chat_action(chat_id=callback.message.chat.id, action=ChatAction.TYPING)
 
     stats = await get_period_stats(session, user.id, days=days)
     if stats["days_tracked"] == 0:

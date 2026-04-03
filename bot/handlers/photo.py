@@ -48,7 +48,7 @@ async def handle_photo(
     user: User,
     vision_provider: VisionProvider,
 ):
-    await message.answer_chat_action(ChatAction.TYPING)
+    await bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING)
 
     # download photo
     photo = message.photo[-1]

@@ -111,7 +111,7 @@ async def refine_process_text(
         await message.answer("Запись не найдена.")
         return
 
-    await message.answer_chat_action(ChatAction.TYPING)
+    await bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING)
 
     # load previous analysis
     try:
@@ -370,7 +370,7 @@ async def cb_suggestion(
         return
 
     await callback.answer("Генерирую...")
-    await callback.message.answer_chat_action(ChatAction.TYPING)
+    await callback.bot.send_chat_action(chat_id=callback.message.chat.id, action=ChatAction.TYPING)
 
     from bot.services.stats import (
         get_today_totals,
