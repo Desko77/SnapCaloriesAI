@@ -27,6 +27,30 @@ NOT_FOOD_REPLY = (
     "Отправь фото еды или задай вопрос про питание."
 )
 
+CLASSIFY_PROMPT = (
+    "Определи, связан ли вопрос с едой, питанием, калориями, диетой, "
+    "продуктами, меню, похудением, набором массы, рецептами, здоровым образом жизни.\n"
+    "Вопрос: {question}\n"
+    "Ответь ОДНИМ словом: YES или NO"
+)
+
+
+async def _is_food_topic(classifier: VisionProvider | None, question: str) -> bool:
+    """Check if question is food-related using free classifier (Gemini)."""
+    if classifier is None:
+        # No classifier available, let the main model handle it
+        return True
+
+    try:
+        response = await classifier.analyze(
+            None, CLASSIFY_PROMPT.format(question=question[:200])
+        )
+        answer = response.strip().upper()
+        return "YES" in answer
+    except Exception:
+        logger.debug("Classifier failed, falling through to main model")
+        return True
+
 
 @router.message(F.text, StateFilter(None))
 async def handle_text(
@@ -35,15 +59,21 @@ async def handle_text(
     session: AsyncSession,
     user: User,
     vision_provider: VisionProvider,
+    topic_classifier: VisionProvider | None = None,
+    text_provider: VisionProvider | None = None,
 ):
     text = message.text.strip()
-    if not text:
+    if not text or text.startswith("/"):
         return
 
-    # Skip commands (should be handled by other routers)
-    if text.startswith("/"):
+    # Step 1: classify topic via free model (Gemini)
+    is_food = await _is_food_topic(topic_classifier, text)
+    if not is_food:
+        await message.answer(NOT_FOOD_REPLY, parse_mode="HTML")
         return
 
+    # Step 2: answer via cheap text model (GPT-4.1 Nano), fallback to main
+    provider = text_provider or vision_provider
     await bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING)
 
     user_profile = {
@@ -70,7 +100,7 @@ async def handle_text(
     )
 
     try:
-        response = await vision_provider.analyze(None, prompt)
+        response = await provider.analyze(None, prompt)
     except Exception:
         logger.exception("Free question AI call failed")
         await message.answer("AI-сервис недоступен. Попробуйте позже.")
@@ -80,12 +110,11 @@ async def handle_text(
         await message.answer("AI вернул пустой ответ. Попробуйте переформулировать.")
         return
 
-    # Check if AI returned the not-food marker
+    # Fallback: if main model also says not food topic
     if "NOT_FOOD_TOPIC" in response.strip():
         await message.answer(NOT_FOOD_REPLY, parse_mode="HTML")
         return
 
-    # Send AI response (plain text, may be long)
     try:
         if len(response) <= 4096:
             await message.answer(response, parse_mode=None)

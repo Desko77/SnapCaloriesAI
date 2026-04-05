@@ -10,14 +10,14 @@ logger = logging.getLogger(__name__)
 
 
 class OpenAICompatProvider(VisionProvider):
-    """OpenAI-compatible provider. Works with OpenAI, LM Studio, Ollama, Qwen, etc."""
+    """OpenAI-compatible provider. Works with OpenAI, OpenRouter, LM Studio, Ollama, etc."""
 
-    def __init__(self):
-        if settings.openai_api_key:
-            self._client = AsyncOpenAI(
-                api_key=settings.openai_api_key,
-                base_url=settings.openai_base_url,
-            )
+    def __init__(self, api_key: str = "", base_url: str = "", model: str = ""):
+        key = api_key or settings.openai_api_key
+        url = base_url or settings.openai_base_url
+        self._model = model or settings.openai_model
+        if key:
+            self._client = AsyncOpenAI(api_key=key, base_url=url)
         else:
             self._client = None
 
@@ -34,7 +34,7 @@ class OpenAICompatProvider(VisionProvider):
             })
 
         response = await self._client.chat.completions.create(
-            model=settings.openai_model,
+            model=self._model,
             messages=[{"role": "user", "content": content}],
         )
         text = response.choices[0].message.content

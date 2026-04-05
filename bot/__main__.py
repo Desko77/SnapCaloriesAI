@@ -9,6 +9,8 @@ from bot.handlers import start, photo, history, goal, report, callbacks, text
 from bot.middlewares.db import DbSessionMiddleware
 from bot.middlewares.user import UserMiddleware
 from bot.services.vision.factory import create_vision_provider
+from bot.services.vision.gemini import GeminiProvider
+from bot.services.vision.openai_compat import OpenAICompatProvider
 
 logging.basicConfig(
     level=logging.INFO,
@@ -27,6 +29,16 @@ async def main():
 
     # vision provider singleton
     dp["vision_provider"] = create_vision_provider()
+
+    # free classifier for topic filtering (Gemini free tier)
+    classifier = GeminiProvider()
+    dp["topic_classifier"] = classifier if await classifier.is_available() else None
+
+    # cheap text-only provider for free questions (GPT-4.1 Nano via OpenRouter)
+    if settings.openai_api_key:
+        dp["text_provider"] = OpenAICompatProvider(model=settings.text_model)
+    else:
+        dp["text_provider"] = None
 
     # middlewares
     dp.update.middleware(DbSessionMiddleware())
