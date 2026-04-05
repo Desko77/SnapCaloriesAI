@@ -328,8 +328,19 @@ async def cb_daily_ai(
     # after fixes
     after = parsed.get("after_fixes", {})
     if after:
-        lines.append(f"\n\U0001f4a1 <b>Идеальный вариант этого дня:</b> ~{after.get('calories', '?')} ккал, "
-                      f"Б:{after.get('protein', '?')}г - {after.get('verdict', '')}")
+        cal = after.get("calories", "?")
+        cal_diff = after.get("calories_diff", "")
+        diff_str = f" ({'+' if isinstance(cal_diff, (int, float)) and cal_diff > 0 else ''}{cal_diff})" if cal_diff else ""
+        lines.append(f"\n\U0001f4a1 <b>Идеальный вариант этого дня:</b>")
+        lines.append(
+            f"\U0001f525 {cal} ккал{diff_str}  "
+            f"\U0001f4aa Б:{after.get('protein', '?')}г  "
+            f"\U0001f9c8 Ж:{after.get('fat', '?')}г  "
+            f"\U0001f33e У:{after.get('carbs', '?')}г"
+        )
+        verdict = after.get("verdict", "")
+        if verdict:
+            lines.append(f"\U0001f449 {verdict}")
 
     # score
     score = parsed.get("score")
