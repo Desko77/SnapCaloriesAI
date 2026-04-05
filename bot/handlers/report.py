@@ -4,14 +4,22 @@ import logging
 from aiogram import Router, F
 from aiogram.enums import ChatAction
 from aiogram.filters import Command
-from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
+from aiogram.types import (
+    BufferedInputFile,
+    CallbackQuery,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    Message,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from bot.constants import GOAL_TYPE_LABELS
 from bot.models.user import User
 from bot.services.nutrition import parse_ai_response
 from bot.services.prompts import render_prompt
 from bot.services.stats import get_period_stats, get_period_meals_for_prompt
 from bot.services.vision.base import VisionProvider
+from bot.utils.charts import generate_trend_chart
 from bot.utils.formatters import format_signal
 
 logger = logging.getLogger(__name__)
@@ -64,13 +72,8 @@ async def cb_report(
 
     meals, frequent = await get_period_meals_for_prompt(session, user.id, days=days)
 
-    # user profile for goal context
     user_profile = {
-        "goal_type": {
-            "loss": "Похудение",
-            "gain": "Набор массы",
-            "maintain": "Поддержание веса",
-        }.get(user.goal_type, user.goal_type),
+        "goal_type": GOAL_TYPE_LABELS.get(user.goal_type, user.goal_type),
         "weight": user.weight,
         "target_weight": user.target_weight,
         "height": user.height,
@@ -84,7 +87,6 @@ async def cb_report(
         "carbs": user.daily_carbs_goal,
     }
 
-    # format stats for prompt
     prompt_stats = {
         "days_tracked": stats["days_tracked"],
         "avg_calories": int(stats["avg_calories"]),
@@ -109,7 +111,6 @@ async def cb_report(
         user_profile=user_profile,
         user_goals=user_goals,
         stats=prompt_stats,
-        meals=meals,
         frequent_products=frequent,
     )
 
@@ -121,43 +122,125 @@ async def cb_report(
         await callback.message.answer("Не удалось сгенерировать отчет. Попробуйте позже.")
         return
 
-    # format response
-    lines = [f"<b>Отчет за {period_label.lower()}</b>\n"]
+    # --- Send chart ---
+    try:
+        chart_data = [
+            {
+                "day": d["day"],
+                "calories": d["calories"],
+                "protein": d.get("protein", 0),
+            }
+            for d in stats["daily_breakdown"]
+        ]
+        chart_png = generate_trend_chart(
+            chart_data, user.daily_calories_goal, period_label
+        )
+        photo = BufferedInputFile(chart_png, filename="trend.png")
+        await callback.message.answer_photo(photo)
+    except Exception:
+        logger.exception("Chart generation failed")
+
+    # --- Format text response ---
+    lines = [f"\U0001f4ca <b>Отчет за {period_label.lower()}</b>\n"]
 
     summary = parsed.get("summary")
     if summary:
         lines.append(summary)
 
+    # Trend
     trend = parsed.get("trend")
     if trend:
-        lines.append(f"\n<b>Тренд:</b> {trend}")
+        if isinstance(trend, dict):
+            direction_icons = {"up": "\u2b06\ufe0f", "down": "\u2b07\ufe0f", "stable": "\u27a1\ufe0f"}
+            icon = direction_icons.get(trend.get("direction", ""), "\u2753")
+            lines.append(f"\n{icon} <b>Тренд:</b> {trend.get('description', '')}")
+        else:
+            lines.append(f"\n<b>Тренд:</b> {trend}")
 
+    # Avg vs goal
+    avg_vs = parsed.get("avg_vs_goal")
+    if avg_vs:
+        comment = avg_vs.get("comment", "")
+        if comment:
+            lines.append(f"\n\U0001f3af <b>Среднее vs цель:</b> {comment}")
+
+    # Patterns
     patterns = parsed.get("patterns", [])
     if patterns:
-        lines.append("\n<b>Паттерны:</b>")
+        lines.append("\n\U0001f50d <b>Паттерны:</b>")
         for p in patterns:
-            lines.append(f"- {p}")
+            lines.append(f"  \u2022 {p}")
 
+    # Hidden enemies
+    enemies = parsed.get("hidden_enemies", [])
+    if enemies:
+        lines.append(f"\n\u26a0\ufe0f <b>Скрытые враги:</b>")
+        for e in enemies:
+            product = e.get("product", "?")
+            freq = e.get("frequency", "")
+            effect = e.get("effect", "")
+            lines.append(f"  \u2022 <b>{product}</b> ({freq}): {effect}")
+
+    # Goal progress
     goal_progress = parsed.get("goal_progress")
     if goal_progress:
-        lines.append(f"\n<b>Прогресс к цели:</b> {goal_progress}")
+        lines.append(f"\n\U0001f4c8 <b>Прогресс:</b> {goal_progress}")
 
+    # Signals
     signals = parsed.get("signals", [])
     if signals:
         lines.append("")
         for s in signals:
             lines.append(format_signal(s.get("level", "green"), s.get("text", "")))
 
-    recommendations = parsed.get("recommendations", [])
-    if recommendations:
-        lines.append("\n<b>Рекомендации:</b>")
-        for r in recommendations:
-            lines.append(f"- {r}")
+    # Fixes
+    fixes = parsed.get("fixes", [])
+    if fixes:
+        lines.append(f"\n\U0001f527 <b>Рекомендации:</b>")
+        for f in fixes:
+            action = f.get("action", "?")
+            effect = f.get("effect", "")
+            lines.append(f"  \u2022 {action}: {effect}")
 
-    key_points = parsed.get("key_points", [])
-    if key_points:
-        lines.append("\n<b>Главное:</b>")
-        for kp in key_points:
-            lines.append(f"- {kp}")
+    # Score
+    score = parsed.get("score")
+    score_comment = parsed.get("score_comment", "")
+    if score is not None:
+        bar_filled = int(score / 10)
+        bar = "\u25fc" * bar_filled + "\u25fb" * (10 - bar_filled)
+        lines.append(f"\n{bar} <b>{score}%</b>")
+        if score_comment:
+            lines.append(score_comment)
 
-    await callback.message.answer("\n".join(lines), parse_mode="HTML")
+    # Final verdict
+    verdict = parsed.get("final_verdict")
+    if verdict:
+        lines.append(f"\n\U0001f4ac <b>Итог:</b> {verdict}")
+
+    text = "\n".join(lines)
+
+    # Menu suggestion button
+    menu_kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text=f"Составить меню на неделю",
+            callback_data=f"weekmenu:{period_key}",
+        )]
+    ])
+
+    try:
+        if len(text) <= 4096:
+            await callback.message.answer(text, parse_mode="HTML", reply_markup=menu_kb)
+        else:
+            parts = text.split("\n\n")
+            chunk = ""
+            for part in parts:
+                if len(chunk) + len(part) + 2 > 4096:
+                    await callback.message.answer(chunk, parse_mode="HTML")
+                    chunk = part
+                else:
+                    chunk = chunk + "\n\n" + part if chunk else part
+            if chunk:
+                await callback.message.answer(chunk, parse_mode="HTML", reply_markup=menu_kb)
+    except Exception:
+        logger.exception("Failed to send report")
+        await callback.message.answer("Ошибка отправки отчета.")

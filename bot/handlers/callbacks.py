@@ -368,6 +368,78 @@ async def cb_daily_ai(
         await callback.message.answer("Ошибка отправки. Попробуйте еще раз.")
 
 
+# --- weekly menu from report ---
+
+@router.callback_query(F.data.startswith("weekmenu:"))
+async def cb_weekmenu(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    user: User,
+    vision_provider: VisionProvider,
+):
+    from bot.services.stats import get_period_stats, get_period_meals_for_prompt
+    from bot.constants import GOAL_TYPE_LABELS
+
+    period_key = callback.data.split(":")[1]
+    periods = {"7": 7, "30": 30, "all": 365}
+    days = periods.get(period_key, 7)
+
+    await callback.answer("Составляю меню на неделю...")
+    await callback.bot.send_chat_action(chat_id=callback.message.chat.id, action=ChatAction.TYPING)
+
+    stats = await get_period_stats(session, user.id, days=days)
+    _, frequent = await get_period_meals_for_prompt(session, user.id, days=days)
+
+    user_profile = {
+        "goal_type": GOAL_TYPE_LABELS.get(user.goal_type, user.goal_type),
+        "weight": user.weight,
+        "target_weight": user.target_weight,
+        "activity": user.activity_level or user.activity_description,
+    }
+    user_goals = {
+        "calories": user.daily_calories_goal,
+        "protein": user.daily_protein_goal,
+        "fat": user.daily_fat_goal,
+        "carbs": user.daily_carbs_goal,
+    }
+    prompt_stats = {
+        "avg_calories": int(stats["avg_calories"]),
+        "avg_protein": int(stats["avg_protein"]),
+        "avg_fat": int(stats["avg_fat"]),
+        "avg_carbs": int(stats["avg_carbs"]),
+    } if stats["days_tracked"] > 0 else None
+
+    prompt = render_prompt(
+        "weekly_menu.j2",
+        user_profile=user_profile,
+        user_goals=user_goals,
+        frequent_products=frequent,
+        stats=prompt_stats,
+    )
+
+    try:
+        response = await vision_provider.analyze(None, prompt)
+    except Exception:
+        logger.exception("Weekly menu generation failed")
+        await callback.message.answer("Не удалось составить меню. Попробуйте позже.")
+        return
+
+    if not response or not response.strip():
+        await callback.message.answer("AI вернул пустой ответ.")
+        return
+
+    try:
+        if len(response) <= 4096:
+            await callback.message.answer(response, parse_mode=None)
+        else:
+            for i in range(0, len(response), 4096):
+                chunk = response[i:i + 4096]
+                await callback.message.answer(chunk, parse_mode=None)
+    except Exception:
+        logger.exception("Failed to send weekly menu")
+        await callback.message.answer("Ошибка отправки меню.")
+
+
 # --- menu ---
 
 @router.callback_query(F.data.startswith("menu:"))
