@@ -2,7 +2,7 @@ import json
 
 from aiogram import Router
 from aiogram.filters import Command
-from aiogram.types import Message
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.models.user import User
@@ -55,7 +55,14 @@ async def cmd_today(message: Message, session: AsyncSession, user: User):
     if not meals:
         lines.append("\nПока нет сохраненных приемов пищи.")
 
-    await message.answer("\n".join(lines), parse_mode="HTML")
+    # AI analysis button (only if there are meals)
+    kb = None
+    if meals:
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="AI-анализ дня", callback_data="daily_ai")]
+        ])
+
+    await message.answer("\n".join(lines), parse_mode="HTML", reply_markup=kb)
 
 
 @router.message(Command("history"))

@@ -220,9 +220,20 @@ def format_today_meals_for_prompt(meals: list[MealLog]) -> list[dict[str, Any]]:
                 pass
         desc = desc or meal.user_comment or "Прием пищи"
 
+        # extract item names from ai_description
+        items_str = ""
+        if meal.ai_description:
+            try:
+                parsed = json.loads(meal.ai_description)
+                item_names = [it.get("name", "") for it in parsed.get("items", [])]
+                items_str = ", ".join(n for n in item_names if n)
+            except (json.JSONDecodeError, AttributeError):
+                pass
+
         result.append({
             "time": meal.logged_at.strftime("%H:%M"),
             "description": desc,
+            "items": items_str,
             "calories": int(meal.total_calories),
             "protein": int(meal.total_protein),
             "fat": int(meal.total_fat),
