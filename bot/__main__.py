@@ -19,6 +19,18 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def _create_local_provider() -> OpenAICompatProvider | None:
+    """Create local LM Studio provider if configured."""
+    if not settings.local_base_url:
+        return None
+    return OpenAICompatProvider(
+        api_key=settings.local_api_key,
+        base_url=settings.local_base_url,
+        model=settings.local_model,
+        reasoning_effort=settings.local_reasoning_effort,
+    )
+
+
 async def main():
     if not settings.bot_token:
         logger.error("BOT_TOKEN is not set. Set it in .env file.")
@@ -27,16 +39,28 @@ async def main():
     bot = Bot(token=settings.bot_token)
     dp = Dispatcher()
 
-    # vision provider singleton
+    # vision provider (GPT-4.1 Mini -> Gemini fallback)
     dp["vision_provider"] = create_vision_provider()
 
-    # free classifier for topic filtering (Gemini free tier)
-    classifier = GeminiProvider()
-    dp["topic_classifier"] = classifier if await classifier.is_available() else None
+    # local model (Gemma 4 via LM Studio) - classifier + text questions
+    local = _create_local_provider()
 
-    # cheap text-only provider for free questions (GPT-4.1 Nano via OpenRouter)
-    if settings.openai_api_key:
+    # topic classifier: local (Gemma) -> Gemini fallback
+    if local and await local.is_available():
+        dp["topic_classifier"] = local
+        logger.info("Topic classifier: local (%s)", settings.local_model)
+    else:
+        gemini = GeminiProvider()
+        dp["topic_classifier"] = gemini if await gemini.is_available() else None
+        logger.info("Topic classifier: Gemini (local not configured)")
+
+    # text provider: local (Gemma) -> GPT-4.1 Nano fallback
+    if local and await local.is_available():
+        dp["text_provider"] = local
+        logger.info("Text provider: local (%s)", settings.local_model)
+    elif settings.openai_api_key:
         dp["text_provider"] = OpenAICompatProvider(model=settings.text_model)
+        logger.info("Text provider: OpenRouter (%s)", settings.text_model)
     else:
         dp["text_provider"] = None
 

@@ -15,12 +15,18 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     gemini_model: str = "gemini-2.5-flash"
 
-    # OpenAI-compatible (primary - for photo analysis)
+    # OpenAI-compatible (primary - for photo analysis via OpenRouter)
     openai_api_key: str = ""
     openai_base_url: str = "https://openrouter.ai/api/v1"
     openai_model: str = "openai/gpt-4.1-mini"
 
-    # Cheap model for text-only questions (no vision needed)
+    # Local model (LM Studio / Ollama) - for classifier + text questions
+    local_base_url: str = ""
+    local_model: str = "google/gemma-4-26b-a4b"
+    local_api_key: str = "lm-studio"
+    local_reasoning_effort: str = "none"
+
+    # Text-only fallback model (OpenRouter, if local unavailable)
     text_model: str = "openai/gpt-4.1-nano"
 
     # Database
