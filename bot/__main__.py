@@ -5,7 +5,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.types import BotCommand
 
 from bot.config import settings
-from bot.handlers import start, photo, history, goal, report, callbacks
+from bot.handlers import start, photo, history, goal, report, callbacks, text
 from bot.middlewares.db import DbSessionMiddleware
 from bot.middlewares.user import UserMiddleware
 from bot.services.vision.factory import create_vision_provider
@@ -39,6 +39,7 @@ async def main():
     dp.include_router(goal.router)
     dp.include_router(report.router)
     dp.include_router(callbacks.router)
+    dp.include_router(text.router)  # must be last: catches all text
 
     # set bot commands menu (russian)
     await bot.set_my_commands([
