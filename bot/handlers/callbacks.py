@@ -15,7 +15,12 @@ from bot.models.meal import MealLog, MealItem
 from bot.models.user import User
 from bot.services.nutrition import parse_ai_response
 from bot.services.prompts import render_prompt
-from bot.services.stats import get_today_totals
+from bot.services.stats import (
+    get_today_meals,
+    get_today_totals,
+    get_weekly_summary_for_prompt,
+    format_today_meals_for_prompt,
+)
 from bot.services.vision.base import VisionProvider
 from bot.utils.formatters import format_macros, format_progress_bar, format_signal
 
@@ -372,13 +377,6 @@ async def cb_suggestion(
     await callback.answer("Генерирую...")
     await callback.bot.send_chat_action(chat_id=callback.message.chat.id, action=ChatAction.TYPING)
 
-    from bot.services.stats import (
-        get_today_totals,
-        get_today_meals,
-        get_weekly_summary_for_prompt,
-        format_today_meals_for_prompt,
-    )
-
     user_goals = {
         "calories": user.daily_calories_goal,
         "protein": user.daily_protein_goal,
@@ -413,4 +411,19 @@ async def cb_suggestion(
         await callback.message.answer("AI-сервис недоступен.")
         return
 
-    await callback.message.answer(response, parse_mode=None)
+    if not response or not response.strip():
+        await callback.message.answer("AI вернул пустой ответ. Попробуйте еще раз.")
+        return
+
+    # Telegram message limit: 4096 chars
+    try:
+        if len(response) <= 4096:
+            await callback.message.answer(response, parse_mode=None)
+        else:
+            # split long responses into chunks
+            for i in range(0, len(response), 4096):
+                chunk = response[i:i + 4096]
+                await callback.message.answer(chunk, parse_mode=None)
+    except Exception:
+        logger.exception("Failed to send suggestion response")
+        await callback.message.answer("Ошибка отправки ответа. Попробуйте еще раз.")
