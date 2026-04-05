@@ -7,9 +7,9 @@ class Settings(BaseSettings):
     # Telegram
     bot_token: str = ""
 
-    # AI Vision
-    vision_provider: str = "gemini"
-    vision_fallback: str = "openai_compat"
+    # AI Vision (primary + fallback)
+    vision_provider: str = "openai_compat"
+    vision_fallback: str = "gemini"
 
     # Google Gemini
     gemini_api_key: str = ""
@@ -17,8 +17,8 @@ class Settings(BaseSettings):
 
     # OpenAI-compatible
     openai_api_key: str = ""
-    openai_base_url: str = "https://api.openai.com/v1"
-    openai_model: str = "gpt-4o"
+    openai_base_url: str = "https://openrouter.ai/api/v1"
+    openai_model: str = "openai/gpt-4.1-mini"
 
     # Database
     database_url: str = "sqlite+aiosqlite:///data/snapcalories.db"
