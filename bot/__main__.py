@@ -54,15 +54,9 @@ async def main():
         dp["topic_classifier"] = gemini if await gemini.is_available() else None
         logger.info("Topic classifier: Gemini (local not configured)")
 
-    # text provider: local (Gemma) -> GPT-4.1 Nano fallback
-    if local and await local.is_available():
-        dp["text_provider"] = local
-        logger.info("Text provider: local (%s)", settings.local_model)
-    elif settings.openai_api_key:
-        dp["text_provider"] = OpenAICompatProvider(model=settings.text_model)
-        logger.info("Text provider: OpenRouter (%s)", settings.text_model)
-    else:
-        dp["text_provider"] = None
+    # text provider: same as vision (GPT-4.1 Mini) for quality
+    # Gemma is only used for classification (fast + free)
+    dp["text_provider"] = None  # will fallback to vision_provider in handler
 
     # middlewares
     dp.update.middleware(DbSessionMiddleware())

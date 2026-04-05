@@ -117,10 +117,18 @@ async def handle_text(
 
     try:
         if len(response) <= 4096:
-            await message.answer(response, parse_mode=None)
+            await message.answer(response, parse_mode="HTML")
         else:
             for i in range(0, len(response), 4096):
-                await message.answer(response[i:i + 4096], parse_mode=None)
+                await message.answer(response[i:i + 4096], parse_mode="HTML")
     except Exception:
-        logger.exception("Failed to send free question response")
-        await message.answer("Ошибка отправки ответа.")
+        # HTML parse error - fallback to plain text
+        try:
+            if len(response) <= 4096:
+                await message.answer(response, parse_mode=None)
+            else:
+                for i in range(0, len(response), 4096):
+                    await message.answer(response[i:i + 4096], parse_mode=None)
+        except Exception:
+            logger.exception("Failed to send free question response")
+            await message.answer("Ошибка отправки ответа.")
