@@ -157,7 +157,7 @@ async def cmd_today(
 
     after = parsed.get("after_fixes", {})
     if after:
-        ai_lines.append(f"\n\u2728 <b>После замен:</b> ~{after.get('calories', '?')} ккал, "
+        ai_lines.append(f"\n\U0001f4a1 <b>Идеальный вариант этого дня:</b> ~{after.get('calories', '?')} ккал, "
                          f"Б:{after.get('protein', '?')}г - {after.get('verdict', '')}")
 
     score = parsed.get("score")
