@@ -189,12 +189,12 @@ async def handle_photo(
     # main issue
     main_issue = parsed.get("main_issue")
     if main_issue:
-        lines.append(f"\n\u26a0\ufe0f <b>Главная проблема:</b> {main_issue}")
+        lines.append(f"\n\u274c <b>Вывод:</b> {main_issue}")
 
     # quick fix
     quick_fix = parsed.get("quick_fix")
     if quick_fix:
-        lines.append(f"\n\U0001f4a1 <b>Быстрое решение:</b> {quick_fix}")
+        lines.append(f"\n\U0001f527 <b>Как сделать идеально (1 замена):</b>\n\U0001f449 {quick_fix}")
 
     # signals
     signals = parsed.get("signals", [])
