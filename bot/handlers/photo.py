@@ -186,6 +186,16 @@ async def handle_photo(
         total.get("carbs_min", 0), total.get("carbs_max", 0),
     ))
 
+    # main issue
+    main_issue = parsed.get("main_issue")
+    if main_issue:
+        lines.append(f"\n\u26a0\ufe0f <b>Главная проблема:</b> {main_issue}")
+
+    # quick fix
+    quick_fix = parsed.get("quick_fix")
+    if quick_fix:
+        lines.append(f"\n\U0001f4a1 <b>Быстрое решение:</b> {quick_fix}")
+
     # signals
     signals = parsed.get("signals", [])
     if signals:
