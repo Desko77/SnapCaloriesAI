@@ -5,7 +5,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.types import BotCommand
 
 from bot.config import settings
-from bot.handlers import start, photo, history, goal, report, callbacks, text
+from bot.handlers import start, photo, history, goal, report, menu, callbacks, text
 from bot.middlewares.album import AlbumMiddleware
 from bot.middlewares.db import DbSessionMiddleware
 from bot.middlewares.user import UserMiddleware
@@ -72,6 +72,7 @@ async def main():
     dp.include_router(history.router)
     dp.include_router(goal.router)
     dp.include_router(report.router)
+    dp.include_router(menu.router)
     dp.include_router(callbacks.router)
     dp.include_router(text.router)  # must be last: catches all text
 
@@ -82,6 +83,7 @@ async def main():
         BotCommand(command="history", description="История за неделю"),
         BotCommand(command="stats", description="Статистика"),
         BotCommand(command="report", description="AI-анализ за период"),
+        BotCommand(command="menu", description="Подбор меню"),
         BotCommand(command="profile", description="Профиль и цели"),
         BotCommand(command="settings", description="Настройки"),
         BotCommand(command="help", description="Справка"),
