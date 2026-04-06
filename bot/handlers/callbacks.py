@@ -235,8 +235,14 @@ async def cb_daily_ai(
 
     from bot.constants import GOAL_TYPE_LABELS
 
+    from bot.services.meal_plan import get_plan_day, compare_day
+
     totals = await get_today_totals(session, user.id)
     meals = format_today_meals_for_prompt(meals_raw)
+
+    # plan comparison
+    plan_day = await get_plan_day(session, user.id)
+    plan_comparison = compare_day(plan_day, totals) if plan_day else None
 
     user_profile = {
         "goal_type": GOAL_TYPE_LABELS.get(user.goal_type, user.goal_type),
@@ -258,6 +264,7 @@ async def cb_daily_ai(
         user_goals=user_goals,
         meals=meals,
         day_totals=totals,
+        plan_today=plan_comparison,
     )
 
     try:

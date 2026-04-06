@@ -19,6 +19,7 @@ from bot.services.stats import (
     get_period_meals_for_prompt,
     format_today_meals_for_prompt,
 )
+from bot.services.meal_plan import get_plan_day, get_plan_for_period, compare_day, compare_period
 from bot.services.vision.base import VisionProvider
 from bot.utils.charts import generate_trend_chart
 from bot.utils.formatters import format_macros, format_progress_bar, format_signal
@@ -81,6 +82,25 @@ async def cmd_today(
     lines.append("")
     lines.append(format_progress_bar(totals["calories"], user.daily_calories_goal))
 
+    # --- plan comparison ---
+    plan_day = await get_plan_day(session, user.id)
+    plan_comparison = None
+    if plan_day and meals:
+        plan_comparison = compare_day(plan_day, totals)
+        d = plan_comparison["diff"]
+        p = plan_comparison["planned"]
+        if plan_comparison["overall_matched"]:
+            lines.append(f"\n\u2705 <b>Ты в рамках плана!</b> Все показатели +-10%")
+        else:
+            lines.append(f"\n\U0001f4cb <b>План на сегодня:</b> {int(p['calories'])} ккал "
+                         f"(\U0001f4aa {int(p['protein'])} / \U0001f9c8 {int(p['fat'])} / \U0001f33e {int(p['carbs'])})")
+            diff_parts = []
+            for label, key in [("ккал", "calories"), ("Б", "protein"), ("Ж", "fat"), ("У", "carbs")]:
+                v = d[key]
+                sign = "+" if v > 0 else ""
+                diff_parts.append(f"{label}:{sign}{int(v)}")
+            lines.append(f"Отклонение: {' | '.join(diff_parts)}")
+
     if not meals:
         lines.append("\nПока нет сохраненных приемов пищи.")
         await message.answer("\n".join(lines), parse_mode="HTML")
@@ -114,6 +134,7 @@ async def cmd_today(
         user_goals=user_goals,
         meals=meals_for_prompt,
         day_totals=totals,
+        plan_today=plan_comparison,
     )
 
     try:
@@ -291,6 +312,27 @@ async def _send_period_report(
     breakdown_lines.append(format_progress_bar(stats["avg_calories"], user.daily_calories_goal))
     breakdown_lines.append(f"Дней отслежено: {stats['days_tracked']}")
 
+    # --- plan comparison ---
+    date_from = date.today() - timedelta(days=days - 1)
+    date_to = date.today()
+    plan_days = await get_plan_for_period(session, user.id, date_from, date_to)
+    period_plan_comparison = compare_period(plan_days, stats["daily_breakdown"]) if plan_days else None
+
+    if period_plan_comparison:
+        pc = period_plan_comparison
+        ad = pc["avg_diff"]
+        breakdown_lines.append("")
+        breakdown_lines.append(f"\U0001f4cb <b>Соблюдение плана:</b>")
+        breakdown_lines.append(f"  Дней с планом: {pc['days_with_data']} / {pc['total_days']}")
+        breakdown_lines.append(f"  Дней в рамках (+-10%): {pc['days_matched']} / {pc['days_with_data']}")
+        diff_parts = []
+        for label, key in [("ккал", "calories"), ("Б", "protein"), ("Ж", "fat"), ("У", "carbs")]:
+            v = ad[key]
+            sign = "+" if v > 0 else ""
+            diff_parts.append(f"{label}:{sign}{int(v)}")
+        breakdown_lines.append(f"  Среднее отклонение: {' | '.join(diff_parts)}")
+        breakdown_lines.append(f"  Приверженность: {pc['adherence_pct']}%")
+
     await message.answer("\n".join(breakdown_lines), parse_mode="HTML")
 
     # --- AI analysis ---
@@ -334,6 +376,7 @@ async def _send_period_report(
         user_goals=user_goals,
         stats=prompt_stats,
         frequent_products=frequent,
+        plan_comparison=period_plan_comparison,
     )
 
     try:

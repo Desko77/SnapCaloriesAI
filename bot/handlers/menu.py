@@ -1,4 +1,7 @@
+import calendar
+import json
 import logging
+from datetime import date, timedelta
 
 from aiogram import Bot, Router, F
 from aiogram.enums import ChatAction
@@ -13,6 +16,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.constants import GOAL_TYPE_LABELS
 from bot.models.user import User
+from bot.services.meal_plan import save_meal_plan
+from bot.services.nutrition import parse_ai_response
 from bot.services.prompts import render_prompt
 from bot.services.stats import (
     get_period_stats,
@@ -27,11 +32,82 @@ logger = logging.getLogger(__name__)
 
 router = Router()
 
-MENU_PERIODS = {
-    "1": ("На завтра", 1, "день"),
-    "7": ("На неделю", 7, "дней"),
-    "30": ("На месяц", 28, "дней"),
-}
+WEEKDAYS_RU = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
+
+
+def _compute_dates(period_key: str) -> tuple[date, date, int, str]:
+    """Compute start_date, end_date, menu_days, period_type for a given period key."""
+    tomorrow = date.today() + timedelta(days=1)
+
+    if period_key == "1":
+        return tomorrow, tomorrow, 1, "day"
+
+    if period_key == "7":
+        end = tomorrow + timedelta(days=6)
+        return tomorrow, end, 7, "week"
+
+    # month: from tomorrow to end of current month
+    _, last_day = calendar.monthrange(tomorrow.year, tomorrow.month)
+    end = date(tomorrow.year, tomorrow.month, last_day)
+    days = (end - tomorrow).days + 1
+    return tomorrow, end, days, "month"
+
+
+def _format_plan_for_telegram(parsed: dict) -> str:
+    """Convert parsed JSON plan to readable Telegram HTML text."""
+    lines = []
+
+    for day_data in parsed.get("days", []):
+        label = day_data.get("day_label", "?")
+        lines.append(f"\U0001f4c5 <b>{label}</b>")
+
+        for meal in day_data.get("meals", []):
+            name = meal.get("name", "?")
+            items = meal.get("items", "")
+            cal = meal.get("calories", 0)
+            pro = meal.get("protein", 0)
+            fat = meal.get("fat", 0)
+            carbs = meal.get("carbs", 0)
+            lines.append(f"  \u25aa <b>{name}</b>: {items}")
+            lines.append(
+                f"    {cal} ккал | \U0001f4aa {pro} | \U0001f9c8 {fat} | \U0001f33e {carbs}"
+            )
+
+        total = day_data.get("total", {})
+        if total:
+            lines.append(
+                f"  <b>Итого:</b> {total.get('calories', 0)} ккал | "
+                f"\U0001f4aa {total.get('protein', 0)} | "
+                f"\U0001f9c8 {total.get('fat', 0)} | "
+                f"\U0001f33e {total.get('carbs', 0)}"
+            )
+        lines.append("")
+
+    shopping = parsed.get("shopping_list", [])
+    if shopping:
+        lines.append("\U0001f6d2 <b>Список закупок:</b>")
+        lines.append(", ".join(shopping))
+
+    return "\n".join(lines)
+
+
+async def _send_long_message(message: Message, text: str, parse_mode: str | None = "HTML"):
+    """Send a message, splitting by double newline if over 4096 chars."""
+    if len(text) <= 4096:
+        await message.answer(text, parse_mode=parse_mode)
+        return
+
+    parts = text.split("\n\n")
+    chunk = ""
+    for part in parts:
+        if len(chunk) + len(part) + 2 > 4096:
+            if chunk:
+                await message.answer(chunk, parse_mode=parse_mode)
+            chunk = part
+        else:
+            chunk = chunk + "\n\n" + part if chunk else part
+    if chunk:
+        await message.answer(chunk, parse_mode=parse_mode)
 
 
 @router.message(Command("menu"))
@@ -60,12 +136,14 @@ async def cb_plan_menu(
     vision_provider: VisionProvider,
 ):
     period_key = callback.data.split(":")[1]
-    if period_key not in MENU_PERIODS:
+    if period_key not in ("1", "7", "30"):
         await callback.answer("Неизвестный период")
         return
 
-    label, menu_days, days_word = MENU_PERIODS[period_key]
-    await callback.answer(f"Составляю меню {label.lower()}...")
+    start_dt, end_dt, menu_days, period_type = _compute_dates(period_key)
+
+    labels = {"1": "На завтра", "7": "На неделю", "30": "На месяц"}
+    await callback.answer(f"Составляю меню {labels[period_key].lower()}...")
     await callback.bot.send_chat_action(
         chat_id=callback.message.chat.id, action=ChatAction.TYPING
     )
@@ -73,7 +151,6 @@ async def cb_plan_menu(
     # gather context from history
     stats_data = await get_period_stats(session, user.id, days=30)
     _, frequent = await get_period_meals_for_prompt(session, user.id, days=30)
-
     weekly = await get_weekly_summary_for_prompt(session, user.id)
 
     prompt_stats = None
@@ -106,10 +183,14 @@ async def cb_plan_menu(
         "carbs": user.daily_carbs_goal,
     }
 
+    days_word = "день" if menu_days == 1 else "дней"
+
     prompt = render_prompt(
         "plan_menu.j2",
         menu_days=menu_days,
         menu_days_word=days_word,
+        start_date=start_dt.strftime("%d.%m"),
+        end_date=end_dt.strftime("%d.%m"),
         user_profile=user_profile,
         user_goals=user_goals,
         frequent_products=frequent,
@@ -118,33 +199,35 @@ async def cb_plan_menu(
     )
 
     try:
-        response = await vision_provider.analyze(None, prompt)
+        raw_response = await vision_provider.analyze(None, prompt)
     except Exception:
         logger.exception("Menu generation failed")
         await callback.message.answer("Не удалось составить меню. Попробуйте позже.")
         return
 
-    if not response or not response.strip():
+    if not raw_response or not raw_response.strip():
         await callback.message.answer("AI вернул пустой ответ.")
         return
 
-    # send response, split if needed
+    # try to parse JSON and save
+    saved = False
     try:
-        if len(response) <= 4096:
-            await callback.message.answer(response, parse_mode=None)
-        else:
-            # split by double newline to keep formatting
-            parts = response.split("\n\n")
-            chunk = ""
-            for part in parts:
-                if len(chunk) + len(part) + 2 > 4096:
-                    if chunk:
-                        await callback.message.answer(chunk, parse_mode=None)
-                    chunk = part
-                else:
-                    chunk = chunk + "\n\n" + part if chunk else part
-            if chunk:
-                await callback.message.answer(chunk, parse_mode=None)
-    except Exception:
-        logger.exception("Failed to send menu")
-        await callback.message.answer("Ошибка отправки меню.")
+        parsed = parse_ai_response(raw_response)
+        if "days" in parsed:
+            await save_meal_plan(
+                session, user.id, period_type, start_dt, end_dt, parsed, raw_response,
+            )
+            saved = True
+
+            # format nice HTML
+            text = _format_plan_for_telegram(parsed)
+            if saved:
+                text += f"\n\n\u2705 <b>План сохранен ({start_dt.strftime('%d.%m')} - {end_dt.strftime('%d.%m')}).</b>"
+                text += "\nБуду сравнивать с фактическим питанием."
+            await _send_long_message(callback.message, text)
+            return
+    except (json.JSONDecodeError, KeyError):
+        logger.warning("Could not parse menu as JSON, sending raw text")
+
+    # fallback: send raw text if JSON parsing failed
+    await _send_long_message(callback.message, raw_response, parse_mode=None)
