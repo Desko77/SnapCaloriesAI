@@ -1,5 +1,6 @@
 import json
 import logging
+from datetime import date, timedelta
 
 from aiogram import Bot, Router
 from aiogram.enums import ChatAction
@@ -27,6 +28,18 @@ logger = logging.getLogger(__name__)
 router = Router()
 
 WEEKDAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
+
+# "за неделю", "за месяц" - винительный падеж
+PERIOD_LABEL_ACC = {
+    "Неделя": "неделю",
+    "Месяц": "месяц",
+    "Все время": "все время",
+}
+
+
+def _period_za(label: str) -> str:
+    """'Неделя' -> 'за неделю'."""
+    return f"за {PERIOD_LABEL_ACC.get(label, label.lower())}"
 
 
 # --- /today ---
@@ -223,10 +236,15 @@ async def _send_period_report(
     stats = await get_period_stats(session, user.id, days=days)
 
     if stats["days_tracked"] == 0:
-        await message.answer(f"Нет данных за {period_label.lower()}.")
+        await message.answer(f"Нет данных {_period_za(period_label)}.")
         return
 
     await bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING)
+
+    # date range
+    date_from = (date.today() - timedelta(days=days - 1)).strftime("%d.%m")
+    date_to = date.today().strftime("%d.%m")
+    date_range = f"{date_from} - {date_to}"
 
     meals, frequent = await get_period_meals_for_prompt(session, user.id, days=days)
 
@@ -242,7 +260,7 @@ async def _send_period_report(
         logger.exception("Chart generation failed")
 
     # --- daily breakdown text ---
-    breakdown_lines = [f"<b>{period_label}:</b>\n"]
+    breakdown_lines = [f"<b>{period_label} ({date_range}):</b>\n"]
 
     for d in stats["daily_breakdown"]:
         day = d["day"]
@@ -327,7 +345,7 @@ async def _send_period_report(
         return
 
     # --- format AI response ---
-    lines = [f"\U0001f4ca <b>AI-анализ за {period_label.lower()}</b>\n"]
+    lines = [f"\U0001f4ca <b>AI-анализ {_period_za(period_label)} ({date_range})</b>\n"]
 
     summary = parsed.get("summary")
     if summary:
