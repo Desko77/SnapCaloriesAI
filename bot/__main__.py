@@ -6,6 +6,7 @@ from aiogram.types import BotCommand
 
 from bot.config import settings
 from bot.handlers import start, photo, history, goal, report, callbacks, text
+from bot.middlewares.album import AlbumMiddleware
 from bot.middlewares.db import DbSessionMiddleware
 from bot.middlewares.user import UserMiddleware
 from bot.services.vision.factory import create_vision_provider
@@ -61,6 +62,9 @@ async def main():
     # middlewares
     dp.update.middleware(DbSessionMiddleware())
     dp.update.middleware(UserMiddleware())
+
+    # album middleware on message level (must be before photo handler)
+    dp.message.middleware(AlbumMiddleware())
 
     # handlers
     dp.include_router(start.router)

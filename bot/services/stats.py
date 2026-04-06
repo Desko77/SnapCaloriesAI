@@ -53,6 +53,26 @@ async def get_today_meals(
     return list(result.scalars().all())
 
 
+async def get_last_meal(
+    session: AsyncSession, user_id: int, day: date | None = None
+) -> MealLog | None:
+    """Return the most recent confirmed meal for the given day."""
+    day = day or date.today()
+
+    result = await session.execute(
+        select(MealLog)
+        .options(selectinload(MealLog.items))
+        .where(
+            MealLog.user_id == user_id,
+            MealLog.is_confirmed == True,  # noqa: E712
+            func.date(MealLog.logged_at) == day,
+        )
+        .order_by(MealLog.logged_at.desc())
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
 async def get_period_stats(
     session: AsyncSession, user_id: int, days: int = 7
 ) -> dict[str, Any]:

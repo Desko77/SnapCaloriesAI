@@ -3,9 +3,12 @@ from abc import ABC, abstractmethod
 
 class VisionProvider(ABC):
     @abstractmethod
-    async def analyze(self, image_data: bytes | None, prompt: str) -> str:
-        """Send image + prompt to the vision model, return raw text response.
-        If image_data is None, send text-only prompt.
+    async def analyze(self, image_data: bytes | list[bytes] | None, prompt: str) -> str:
+        """Send image(s) + prompt to the vision model, return raw text response.
+        image_data can be:
+          - None: text-only prompt
+          - bytes: single image
+          - list[bytes]: multiple images (album/media group)
         """
 
     @abstractmethod

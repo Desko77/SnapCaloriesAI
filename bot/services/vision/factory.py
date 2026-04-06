@@ -20,7 +20,7 @@ class FallbackVisionProvider(VisionProvider):
         self._primary = primary
         self._fallback = fallback
 
-    async def analyze(self, image_data: bytes | None, prompt: str) -> str:
+    async def analyze(self, image_data: bytes | list[bytes] | None, prompt: str) -> str:
         try:
             return await self._primary.analyze(image_data, prompt)
         except Exception as exc:

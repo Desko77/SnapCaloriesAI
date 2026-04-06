@@ -28,17 +28,19 @@ class OpenAICompatProvider(VisionProvider):
         else:
             self._client = None
 
-    async def analyze(self, image_data: bytes | None, prompt: str) -> str:
+    async def analyze(self, image_data: bytes | list[bytes] | None, prompt: str) -> str:
         if self._client is None:
             raise RuntimeError("OpenAI-compatible API not configured")
 
         content: list[dict] = [{"type": "text", "text": prompt}]
         if image_data:
-            b64 = base64.b64encode(image_data).decode("utf-8")
-            content.append({
-                "type": "image_url",
-                "image_url": {"url": f"data:image/jpeg;base64,{b64}"},
-            })
+            images = image_data if isinstance(image_data, list) else [image_data]
+            for img in images:
+                b64 = base64.b64encode(img).decode("utf-8")
+                content.append({
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/jpeg;base64,{b64}"},
+                })
 
         extra: dict = {}
         if self._reasoning_effort:

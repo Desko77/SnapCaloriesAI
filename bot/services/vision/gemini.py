@@ -16,15 +16,17 @@ class GeminiProvider(VisionProvider):
         else:
             self._client = None
 
-    async def analyze(self, image_data: bytes | None, prompt: str) -> str:
+    async def analyze(self, image_data: bytes | list[bytes] | None, prompt: str) -> str:
         if self._client is None:
             raise RuntimeError("Gemini API key not configured")
 
         contents: list = [prompt]
         if image_data:
-            contents.append(
-                types.Part.from_bytes(data=image_data, mime_type="image/jpeg")
-            )
+            images = image_data if isinstance(image_data, list) else [image_data]
+            for img in images:
+                contents.append(
+                    types.Part.from_bytes(data=img, mime_type="image/jpeg")
+                )
 
         response = await self._client.aio.models.generate_content(
             model=settings.gemini_model,
