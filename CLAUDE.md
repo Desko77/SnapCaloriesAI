@@ -64,14 +64,26 @@ docker compose up -d
 
 ## Развертка на сервере
 
+### Docker Hub (рекомендуется)
+```bash
+mkdir snapcaloriesai && cd snapcaloriesai
+# создать .env с BOT_TOKEN и GEMINI_API_KEY
+docker run -d --name snapcaloriesai \
+  -v ./data:/app/data --env-file .env \
+  --restart unless-stopped \
+  desko77/snapcaloriesai:latest
+```
+
+### Docker Compose (из исходников)
 1. Склонировать репозиторий
 2. Скопировать `.env.example` в `.env`, заполнить:
    - `BOT_TOKEN` - токен Telegram бота (через @BotFather)
    - `GEMINI_API_KEY` - ключ Google Gemini API
    - Опционально: `OPENAI_API_KEY`, `OPENAI_BASE_URL` для фолбека
 3. `docker compose up -d --build`
-4. Миграции применяются автоматически (alembic upgrade head в entrypoint)
-5. Данные в `./data/` - бекапить эту папку
+
+Миграции применяются автоматически (alembic upgrade head в entrypoint).
+Данные в `./data/` - бекапить эту папку.
 
 ## Ключевые решения
 

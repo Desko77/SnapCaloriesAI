@@ -6,7 +6,6 @@ def meal_result_keyboard(
 ) -> InlineKeyboardMarkup:
     rows = [
         [
-            InlineKeyboardButton(text="Сохранить", callback_data=f"save:{meal_id}"),
             InlineKeyboardButton(text="Уточнить", callback_data=f"refine:{meal_id}"),
             InlineKeyboardButton(text="Отмена", callback_data=f"cancel:{meal_id}"),
         ],

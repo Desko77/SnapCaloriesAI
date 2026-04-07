@@ -21,10 +21,160 @@ from bot.services.stats import (
     get_weekly_summary_for_prompt,
     format_today_meals_for_prompt,
 )
+from bot.constants import GOAL_TYPE_LABELS
+from bot.services.meal_plan import get_plan_day, compare_day
 from bot.services.vision.base import VisionProvider
 from bot.utils.formatters import format_macros, format_progress_bar, format_signal
 
 logger = logging.getLogger(__name__)
+
+
+async def _send_daily_ai_analysis(
+    chat_id: int,
+    bot: Bot,
+    session: AsyncSession,
+    user: User,
+    vision_provider: VisionProvider,
+) -> None:
+    """Отправить AI-анализ дня в чат."""
+    meals_raw = await get_today_meals(session, user.id)
+    if not meals_raw:
+        return
+
+    await bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
+
+    totals = await get_today_totals(session, user.id)
+    meals = format_today_meals_for_prompt(meals_raw)
+
+    plan_day = await get_plan_day(session, user.id)
+    plan_comparison = compare_day(plan_day, totals) if plan_day else None
+
+    user_profile = {
+        "goal_type": GOAL_TYPE_LABELS.get(user.goal_type, user.goal_type),
+        "weight": user.weight,
+        "target_weight": user.target_weight,
+        "height": user.height,
+        "activity": user.activity_level or user.activity_description,
+    }
+    user_goals = {
+        "calories": user.daily_calories_goal,
+        "protein": user.daily_protein_goal,
+        "fat": user.daily_fat_goal,
+        "carbs": user.daily_carbs_goal,
+    }
+
+    prompt = render_prompt(
+        "daily_summary.j2",
+        user_profile=user_profile,
+        user_goals=user_goals,
+        meals=meals,
+        day_totals=totals,
+        plan_today=plan_comparison,
+    )
+
+    try:
+        raw = await vision_provider.analyze(None, prompt)
+        parsed = parse_ai_response(raw)
+    except Exception:
+        logger.exception("Daily AI analysis failed")
+        await bot.send_message(chat_id, "Не удалось сгенерировать анализ. Попробуйте позже.")
+        return
+
+    lines = ["\U0001f4ca <b>AI-анализ дня</b>\n"]
+
+    meals_summary = parsed.get("meals_summary", [])
+    if meals_summary:
+        for ms in meals_summary:
+            lines.append(
+                f"\U0001f37d <b>{ms.get('name', '?')}</b>: {ms.get('items', '')}"
+            )
+            lines.append(f"   ~{ms.get('calories', 0)} ккал / {ms.get('protein', 0)}г белка")
+        lines.append("")
+
+    t = parsed.get("totals", {})
+    if t:
+        cal = t.get("calories", 0)
+        cal_goal = t.get("calories_goal", user.daily_calories_goal)
+        cal_diff = t.get("calories_diff", cal - cal_goal)
+        diff_sign = "+" if cal_diff > 0 else ""
+        lines.append(f"\U0001f525 <b>Итого: {cal} ккал</b> (цель {cal_goal}, {diff_sign}{cal_diff})")
+        lines.append(
+            f"\U0001f4aa Б:{t.get('protein', 0)}г  "
+            f"\U0001f9c8 Ж:{t.get('fat', 0)}г  "
+            f"\U0001f33e У:{t.get('carbs', 0)}г"
+        )
+
+    plus = parsed.get("analysis_plus", [])
+    if plus:
+        lines.append(f"\n\u2705 <b>Плюсы:</b>")
+        for p in plus:
+            lines.append(f"  \u2022 {p}")
+
+    minus = parsed.get("analysis_minus", [])
+    if minus:
+        lines.append(f"\n\u274c <b>Проблемы:</b>")
+        for m in minus:
+            lines.append(f"  \u2022 {m}")
+
+    enemies = parsed.get("hidden_enemies", [])
+    if enemies:
+        lines.append(f"\n\u26a0\ufe0f <b>Скрытые враги:</b>")
+        for e in enemies:
+            lines.append(f"  \u2022 <b>{e.get('product', '?')}</b> - {e.get('problem', '')}")
+
+    fixes = parsed.get("fixes", [])
+    if fixes:
+        lines.append(f"\n\U0001f527 <b>Как сделать идеально:</b>")
+        for f in fixes:
+            lines.append(f"  \u2022 {f.get('replace', '?')} \u2192 {f.get('with', '?')}: {f.get('effect', '')}")
+
+    after = parsed.get("after_fixes", {})
+    if after:
+        cal = after.get("calories", "?")
+        cal_diff = after.get("calories_diff", "")
+        diff_str = f" ({'+' if isinstance(cal_diff, (int, float)) and cal_diff > 0 else ''}{cal_diff})" if cal_diff else ""
+        lines.append(f"\n\U0001f4a1 <b>Идеальный вариант этого дня:</b>")
+        lines.append(
+            f"\U0001f525 {cal} ккал{diff_str}  "
+            f"\U0001f4aa Б:{after.get('protein', '?')}г  "
+            f"\U0001f9c8 Ж:{after.get('fat', '?')}г  "
+            f"\U0001f33e У:{after.get('carbs', '?')}г"
+        )
+        verdict = after.get("verdict", "")
+        if verdict:
+            lines.append(f"\U0001f449 {verdict}")
+
+    score = parsed.get("score")
+    score_comment = parsed.get("score_comment", "")
+    if score is not None:
+        bar_filled = int(score / 10)
+        bar = "\u25fc" * bar_filled + "\u25fb" * (10 - bar_filled)
+        lines.append(f"\n{bar} <b>{score}%</b>")
+        if score_comment:
+            lines.append(score_comment)
+
+    verdict = parsed.get("final_verdict")
+    if verdict:
+        lines.append(f"\n\U0001f4ac <b>Итог:</b> {verdict}")
+
+    text = "\n".join(lines)
+
+    try:
+        if len(text) <= 4096:
+            await bot.send_message(chat_id, text, parse_mode="HTML")
+        else:
+            parts = text.split("\n\n")
+            chunk = ""
+            for part in parts:
+                if len(chunk) + len(part) + 2 > 4096:
+                    await bot.send_message(chat_id, chunk, parse_mode="HTML")
+                    chunk = part
+                else:
+                    chunk = chunk + "\n\n" + part if chunk else part
+            if chunk:
+                await bot.send_message(chat_id, chunk, parse_mode="HTML")
+    except Exception:
+        logger.exception("Failed to send daily AI analysis")
 
 router = Router()
 
@@ -37,27 +187,6 @@ async def _load_meal(session: AsyncSession, meal_id: int, user_id: int) -> MealL
     )
     return result.scalar_one_or_none()
 
-
-# --- save ---
-
-@router.callback_query(F.data.startswith("save:"))
-async def cb_save(
-    callback: CallbackQuery, session: AsyncSession, user: User
-):
-    meal_id = int(callback.data.split(":")[1])
-    meal = await _load_meal(session, meal_id, user.id)
-    if not meal:
-        await callback.answer("Запись не найдена")
-        return
-
-    meal.is_confirmed = True
-    await session.commit()
-
-    try:
-        await callback.message.edit_reply_markup(reply_markup=None)
-    except Exception:
-        pass
-    await callback.answer("Сохранено!")
 
 
 # --- cancel ---
@@ -201,19 +330,46 @@ async def refine_process_text(
 
 @router.callback_query(F.data == "today")
 async def cb_today(
-    callback: CallbackQuery, session: AsyncSession, user: User
+    callback: CallbackQuery, session: AsyncSession, user: User,
+    vision_provider: VisionProvider,
 ):
     totals = await get_today_totals(session, user.id)
+    meals = await get_today_meals(session, user.id)
 
     lines = ["<b>Итого за сегодня:</b>\n"]
-    lines.append(format_macros(
-        totals["calories"], totals["protein"], totals["fat"], totals["carbs"]
-    ))
+
+    if meals:
+        lines.append("<b>Приемы пищи:</b>")
+        for m in meals:
+            time_str = m.logged_at.strftime("%H:%M")
+            desc = m.ai_description
+            if desc:
+                try:
+                    desc = json.loads(desc).get("description", "")
+                except Exception:
+                    desc = ""
+            desc = desc or "Прием пищи"
+            lines.append(f"{time_str} - {desc} ({m.total_calories:.0f} ккал)")
+        lines.append("")
+
+    lines.append("<b>Итого:</b>")
+    lines.append(f"Калории: {totals['calories']:.0f} / {user.daily_calories_goal} ккал")
+    lines.append(f"Белки: {totals['protein']:.0f} / {user.daily_protein_goal} г")
+    lines.append(f"Жиры: {totals['fat']:.0f} / {user.daily_fat_goal} г")
+    lines.append(f"Углеводы: {totals['carbs']:.0f} / {user.daily_carbs_goal} г")
     lines.append("")
     lines.append(format_progress_bar(totals["calories"], user.daily_calories_goal))
 
+    if not meals:
+        lines.append("\nПока нет сохраненных приемов пищи.")
+
     await callback.message.answer("\n".join(lines), parse_mode="HTML")
     await callback.answer()
+
+    if meals:
+        await _send_daily_ai_analysis(
+            callback.message.chat.id, callback.bot, session, user, vision_provider,
+        )
 
 
 # --- daily AI analysis ---
@@ -231,159 +387,9 @@ async def cb_daily_ai(
         return
 
     await callback.answer("Генерирую AI-анализ дня...")
-    await callback.bot.send_chat_action(chat_id=callback.message.chat.id, action=ChatAction.TYPING)
-
-    from bot.constants import GOAL_TYPE_LABELS
-
-    from bot.services.meal_plan import get_plan_day, compare_day
-
-    totals = await get_today_totals(session, user.id)
-    meals = format_today_meals_for_prompt(meals_raw)
-
-    # plan comparison
-    plan_day = await get_plan_day(session, user.id)
-    plan_comparison = compare_day(plan_day, totals) if plan_day else None
-
-    user_profile = {
-        "goal_type": GOAL_TYPE_LABELS.get(user.goal_type, user.goal_type),
-        "weight": user.weight,
-        "target_weight": user.target_weight,
-        "height": user.height,
-        "activity": user.activity_level or user.activity_description,
-    }
-    user_goals = {
-        "calories": user.daily_calories_goal,
-        "protein": user.daily_protein_goal,
-        "fat": user.daily_fat_goal,
-        "carbs": user.daily_carbs_goal,
-    }
-
-    prompt = render_prompt(
-        "daily_summary.j2",
-        user_profile=user_profile,
-        user_goals=user_goals,
-        meals=meals,
-        day_totals=totals,
-        plan_today=plan_comparison,
+    await _send_daily_ai_analysis(
+        callback.message.chat.id, callback.bot, session, user, vision_provider,
     )
-
-    try:
-        raw = await vision_provider.analyze(None, prompt)
-        parsed = parse_ai_response(raw)
-    except Exception:
-        logger.exception("Daily AI analysis failed")
-        await callback.message.answer("Не удалось сгенерировать анализ. Попробуйте позже.")
-        return
-
-    # format response
-    lines = ["\U0001f4ca <b>AI-анализ дня</b>\n"]
-
-    # meals summary
-    meals_summary = parsed.get("meals_summary", [])
-    if meals_summary:
-        for ms in meals_summary:
-            lines.append(
-                f"\U0001f37d <b>{ms.get('name', '?')}</b>: {ms.get('items', '')}"
-            )
-            lines.append(f"   ~{ms.get('calories', 0)} ккал / {ms.get('protein', 0)}г белка")
-        lines.append("")
-
-    # totals vs goal
-    t = parsed.get("totals", {})
-    if t:
-        cal = t.get("calories", 0)
-        cal_goal = t.get("calories_goal", user.daily_calories_goal)
-        cal_diff = t.get("calories_diff", cal - cal_goal)
-        diff_sign = "+" if cal_diff > 0 else ""
-        lines.append(f"\U0001f525 <b>Итого: {cal} ккал</b> (цель {cal_goal}, {diff_sign}{cal_diff})")
-        lines.append(
-            f"\U0001f4aa Б:{t.get('protein', 0)}г  "
-            f"\U0001f9c8 Ж:{t.get('fat', 0)}г  "
-            f"\U0001f33e У:{t.get('carbs', 0)}г"
-        )
-
-    # pluses
-    plus = parsed.get("analysis_plus", [])
-    if plus:
-        lines.append(f"\n\u2705 <b>Плюсы:</b>")
-        for p in plus:
-            lines.append(f"  \u2022 {p}")
-
-    # minuses
-    minus = parsed.get("analysis_minus", [])
-    if minus:
-        lines.append(f"\n\u274c <b>Проблемы:</b>")
-        for m in minus:
-            lines.append(f"  \u2022 {m}")
-
-    # hidden enemies
-    enemies = parsed.get("hidden_enemies", [])
-    if enemies:
-        lines.append(f"\n\u26a0\ufe0f <b>Скрытые враги:</b>")
-        for e in enemies:
-            product = e.get("product", "?")
-            problem = e.get("problem", "")
-            lines.append(f"  \u2022 <b>{product}</b> - {problem}")
-
-    # fixes
-    fixes = parsed.get("fixes", [])
-    if fixes:
-        lines.append(f"\n\U0001f527 <b>Как сделать идеально:</b>")
-        for f in fixes:
-            lines.append(f"  \u2022 {f.get('replace', '?')} \u2192 {f.get('with', '?')}: {f.get('effect', '')}")
-
-    # after fixes
-    after = parsed.get("after_fixes", {})
-    if after:
-        cal = after.get("calories", "?")
-        cal_diff = after.get("calories_diff", "")
-        diff_str = f" ({'+' if isinstance(cal_diff, (int, float)) and cal_diff > 0 else ''}{cal_diff})" if cal_diff else ""
-        lines.append(f"\n\U0001f4a1 <b>Идеальный вариант этого дня:</b>")
-        lines.append(
-            f"\U0001f525 {cal} ккал{diff_str}  "
-            f"\U0001f4aa Б:{after.get('protein', '?')}г  "
-            f"\U0001f9c8 Ж:{after.get('fat', '?')}г  "
-            f"\U0001f33e У:{after.get('carbs', '?')}г"
-        )
-        verdict = after.get("verdict", "")
-        if verdict:
-            lines.append(f"\U0001f449 {verdict}")
-
-    # score
-    score = parsed.get("score")
-    score_comment = parsed.get("score_comment", "")
-    if score is not None:
-        bar_filled = int(score / 10)
-        bar = "\u25fc" * bar_filled + "\u25fb" * (10 - bar_filled)
-        lines.append(f"\n{bar} <b>{score}%</b>")
-        if score_comment:
-            lines.append(score_comment)
-
-    # final verdict
-    verdict = parsed.get("final_verdict")
-    if verdict:
-        lines.append(f"\n\U0001f4ac <b>Итог:</b> {verdict}")
-
-    text = "\n".join(lines)
-
-    try:
-        if len(text) <= 4096:
-            await callback.message.answer(text, parse_mode="HTML")
-        else:
-            # split by double newline to avoid breaking formatting
-            parts = text.split("\n\n")
-            chunk = ""
-            for part in parts:
-                if len(chunk) + len(part) + 2 > 4096:
-                    await callback.message.answer(chunk, parse_mode="HTML")
-                    chunk = part
-                else:
-                    chunk = chunk + "\n\n" + part if chunk else part
-            if chunk:
-                await callback.message.answer(chunk, parse_mode="HTML")
-    except Exception:
-        logger.exception("Failed to send daily AI analysis")
-        await callback.message.answer("Ошибка отправки. Попробуйте еще раз.")
 
 
 # --- weekly menu from report ---
