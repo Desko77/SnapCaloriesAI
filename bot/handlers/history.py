@@ -58,7 +58,8 @@ async def cmd_today(
     meals = await get_today_meals(session, user.id)
 
     # --- Quick stats (instant) ---
-    lines = ["<b>Сегодня:</b>\n"]
+    today = date.today()
+    lines = [f"<b>Сегодня ({today.strftime('%d.%m.%Y')}):</b>\n"]
 
     if meals:
         lines.append("<b>Приемы пищи:</b>")

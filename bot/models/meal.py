@@ -25,8 +25,8 @@ class MealLog(Base):
     portion_grams: Mapped[float | None] = mapped_column(Float)
 
     is_confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
-    logged_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    logged_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
     user: Mapped["User"] = relationship(back_populates="meals")
     items: Mapped[list["MealItem"]] = relationship(

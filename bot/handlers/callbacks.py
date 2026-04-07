@@ -336,7 +336,8 @@ async def cb_today(
     totals = await get_today_totals(session, user.id)
     meals = await get_today_meals(session, user.id)
 
-    lines = ["<b>Итого за сегодня:</b>\n"]
+    from datetime import date as date_cls
+    lines = [f"<b>Итого за сегодня ({date_cls.today().strftime('%d.%m.%Y')}):</b>\n"]
 
     if meals:
         lines.append("<b>Приемы пищи:</b>")
