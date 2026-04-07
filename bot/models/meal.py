@@ -3,6 +3,7 @@ from datetime import datetime
 from sqlalchemy import ForeignKey, String, Float, Boolean, Text, DateTime, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from bot.config import now_local
 from bot.models.base import Base
 
 
@@ -25,8 +26,8 @@ class MealLog(Base):
     portion_grams: Mapped[float | None] = mapped_column(Float)
 
     is_confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
-    logged_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    logged_at: Mapped[datetime] = mapped_column(DateTime, default=now_local)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_local)
 
     user: Mapped["User"] = relationship(back_populates="meals")
     items: Mapped[list["MealItem"]] = relationship(

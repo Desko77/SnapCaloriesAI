@@ -10,6 +10,7 @@ from aiogram.filters import StateFilter
 from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from bot.config import now_local
 from bot.keyboards.meal import meal_result_keyboard
 from bot.models.meal import MealLog, MealItem
 from bot.models.user import User
@@ -85,7 +86,7 @@ async def _save_photos_to_disk(
     photos_dir = Path("data/photos") / str(telegram_id)
     photos_dir.mkdir(parents=True, exist_ok=True)
 
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    ts = now_local().strftime("%Y%m%d_%H%M%S")
     paths = []
     for i, (image_data, _) in enumerate(photos):
         suffix = f"_{i}" if i > 0 else ""

@@ -6,6 +6,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from bot.config import today_local
 from bot.constants import GOAL_TYPE_LABELS
 from bot.handlers.states import GoalEditState
 from bot.models.user import User
@@ -255,7 +256,7 @@ async def goal_process_value(
     elif param == "deadline":
         try:
             parsed_date = datetime.strptime(text, "%d.%m.%Y").date()
-            if parsed_date <= date.today():
+            if parsed_date <= today_local():
                 await message.answer("Дата должна быть в будущем. Попробуйте /goal.")
                 return
             setattr(user, attr, parsed_date)

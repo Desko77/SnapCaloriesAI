@@ -21,6 +21,7 @@ from bot.services.stats import (
     get_weekly_summary_for_prompt,
     format_today_meals_for_prompt,
 )
+from bot.config import today_local
 from bot.constants import GOAL_TYPE_LABELS
 from bot.services.meal_plan import get_plan_day, compare_day
 from bot.services.vision.base import VisionProvider
@@ -336,8 +337,7 @@ async def cb_today(
     totals = await get_today_totals(session, user.id)
     meals = await get_today_meals(session, user.id)
 
-    from datetime import date as date_cls
-    lines = [f"<b>Итого за сегодня ({date_cls.today().strftime('%d.%m.%Y')}):</b>\n"]
+    lines = [f"<b>Итого за сегодня ({today_local().strftime('%d.%m.%Y')}):</b>\n"]
 
     if meals:
         lines.append("<b>Приемы пищи:</b>")

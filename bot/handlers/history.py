@@ -8,6 +8,7 @@ from aiogram.filters import Command
 from aiogram.types import BufferedInputFile, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from bot.config import today_local
 from bot.constants import GOAL_TYPE_LABELS
 from bot.handlers.callbacks import _send_daily_ai_analysis
 from bot.models.user import User
@@ -58,7 +59,7 @@ async def cmd_today(
     meals = await get_today_meals(session, user.id)
 
     # --- Quick stats (instant) ---
-    today = date.today()
+    today = today_local()
     lines = [f"<b>Сегодня ({today.strftime('%d.%m.%Y')}):</b>\n"]
 
     if meals:
@@ -135,8 +136,8 @@ async def _send_period_report(
     await bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING)
 
     # date range
-    date_from = (date.today() - timedelta(days=days - 1)).strftime("%d.%m")
-    date_to = date.today().strftime("%d.%m")
+    date_from = (today_local() - timedelta(days=days - 1)).strftime("%d.%m")
+    date_to = today_local().strftime("%d.%m")
     date_range = f"{date_from} - {date_to}"
 
     meals, frequent = await get_period_meals_for_prompt(session, user.id, days=days)
@@ -185,8 +186,8 @@ async def _send_period_report(
     breakdown_lines.append(f"Дней отслежено: {stats['days_tracked']}")
 
     # --- plan comparison ---
-    date_from = date.today() - timedelta(days=days - 1)
-    date_to = date.today()
+    date_from = today_local() - timedelta(days=days - 1)
+    date_to = today_local()
     plan_days = await get_plan_for_period(session, user.id, date_from, date_to)
     period_plan_comparison = compare_period(plan_days, stats["daily_breakdown"]) if plan_days else None
 

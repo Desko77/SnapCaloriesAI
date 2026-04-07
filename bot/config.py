@@ -1,4 +1,21 @@
+from datetime import date, datetime, timezone, timedelta
+
 from pydantic_settings import BaseSettings
+
+# Moscow timezone (UTC+3), used as default for all date/time operations.
+# Override via TZ_OFFSET_HOURS env var if server moves to another timezone.
+_TZ_OFFSET_HOURS = 3
+_TZ = timezone(timedelta(hours=_TZ_OFFSET_HOURS))
+
+
+def now_local() -> datetime:
+    """Current datetime in configured timezone (naive, for DB storage)."""
+    return datetime.now(_TZ).replace(tzinfo=None)
+
+
+def today_local() -> date:
+    """Current date in configured timezone."""
+    return datetime.now(_TZ).date()
 
 
 class Settings(BaseSettings):

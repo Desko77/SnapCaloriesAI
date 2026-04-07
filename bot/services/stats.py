@@ -7,13 +7,14 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from bot.config import today_local
 from bot.models.meal import MealLog
 
 
 async def get_today_totals(
     session: AsyncSession, user_id: int, day: date | None = None
 ) -> dict[str, float]:
-    day = day or date.today()
+    day = day or today_local()
 
     result = await session.execute(
         select(
@@ -39,7 +40,7 @@ async def get_today_totals(
 async def get_today_meals(
     session: AsyncSession, user_id: int, day: date | None = None
 ) -> list[MealLog]:
-    day = day or date.today()
+    day = day or today_local()
 
     result = await session.execute(
         select(MealLog)
@@ -57,7 +58,7 @@ async def get_last_meal(
     session: AsyncSession, user_id: int, day: date | None = None
 ) -> MealLog | None:
     """Return the most recent confirmed meal for the given day."""
-    day = day or date.today()
+    day = day or today_local()
 
     result = await session.execute(
         select(MealLog)
@@ -76,7 +77,7 @@ async def get_last_meal(
 async def get_period_stats(
     session: AsyncSession, user_id: int, days: int = 7
 ) -> dict[str, Any]:
-    since = date.today() - timedelta(days=days - 1)
+    since = today_local() - timedelta(days=days - 1)
 
     result = await session.execute(
         select(
@@ -128,7 +129,7 @@ async def get_period_meals_for_prompt(
     session: AsyncSession, user_id: int, days: int = 7
 ) -> tuple[list[dict], list[str]]:
     """Get all meals for a period, formatted for AI prompt. Returns (meals, frequent_products)."""
-    since = date.today() - timedelta(days=days - 1)
+    since = today_local() - timedelta(days=days - 1)
 
     result = await session.execute(
         select(MealLog)
@@ -178,7 +179,7 @@ async def get_weekly_summary_for_prompt(
         return None
 
     # get all confirmed meals for the week to extract product names
-    since = date.today() - timedelta(days=6)
+    since = today_local() - timedelta(days=6)
     result = await session.execute(
         select(MealLog)
         .options(selectinload(MealLog.items))

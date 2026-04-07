@@ -14,6 +14,8 @@ from aiogram.types import (
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from bot.config import today_local
+
 from bot.constants import GOAL_TYPE_LABELS
 from bot.models.user import User
 from bot.services.meal_plan import save_meal_plan
@@ -37,7 +39,7 @@ WEEKDAYS_RU = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
 
 def _compute_dates(period_key: str) -> tuple[date, date, int, str]:
     """Compute start_date, end_date, menu_days, period_type for a given period key."""
-    tomorrow = date.today() + timedelta(days=1)
+    tomorrow = today_local() + timedelta(days=1)
 
     if period_key == "1":
         return tomorrow, tomorrow, 1, "day"

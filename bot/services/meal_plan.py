@@ -7,6 +7,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from bot.config import today_local
 from bot.models.meal_plan import MealPlan, MealPlanDay
 
 
@@ -78,7 +79,7 @@ async def get_plan_day(
     session: AsyncSession, user_id: int, day: date | None = None
 ) -> MealPlanDay | None:
     """Get the plan day for a specific date from the active plan."""
-    day = day or date.today()
+    day = day or today_local()
     result = await session.execute(
         select(MealPlanDay)
         .join(MealPlan)
