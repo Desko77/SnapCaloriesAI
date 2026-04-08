@@ -404,9 +404,9 @@ async def cb_weekmenu(
 ):
     from bot.handlers.menu import cb_plan_menu as _plan_menu
 
-    # rewrite callback data to planmenu:7 and delegate
-    callback.data = "planmenu:7"
-    await _plan_menu(callback, session, user, vision_provider)
+    # Create a shallow copy with modified data (callback is frozen in pydantic v2)
+    patched = callback.model_copy(update={"data": "planmenu:7"})
+    await _plan_menu(patched, session, user, vision_provider)
 
 
 # --- menu ---
