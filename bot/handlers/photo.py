@@ -394,7 +394,7 @@ async def handle_photo(
         total_protein=pro_avg,
         total_fat=fat_avg,
         total_carbs=carb_avg,
-        is_confirmed=True,
+        is_confirmed=False,
     )
     session.add(meal_log)
 

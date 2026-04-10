@@ -190,7 +190,33 @@ async def _load_meal(session: AsyncSession, meal_id: int, user_id: int) -> MealL
 
 
 
-# --- cancel ---
+# --- confirm (save to diary) ---
+
+@router.callback_query(F.data.startswith("confirm:"))
+async def cb_confirm(
+    callback: CallbackQuery, session: AsyncSession, user: User
+):
+    meal_id = int(callback.data.split(":")[1])
+    meal = await _load_meal(session, meal_id, user.id)
+    if not meal:
+        await callback.answer("Запись не найдена")
+        return
+
+    if meal.is_confirmed:
+        await callback.answer("Уже сохранено")
+        return
+
+    meal.is_confirmed = True
+    await session.commit()
+
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+    await callback.answer("Сохранено в дневник!")
+
+
+# --- cancel (don't save, keep in history) ---
 
 @router.callback_query(F.data.startswith("cancel:"))
 async def cb_cancel(
@@ -202,14 +228,11 @@ async def cb_cancel(
         await callback.answer("Запись не найдена")
         return
 
-    await session.delete(meal)
-    await session.commit()
-
     try:
         await callback.message.edit_reply_markup(reply_markup=None)
     except Exception:
         pass
-    await callback.answer("Отменено")
+    await callback.answer("Не сохранено")
 
 
 # --- refine (step 1: ask for text) ---
