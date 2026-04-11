@@ -16,6 +16,7 @@ from bot.models.meal import MealLog, MealItem
 from bot.models.user import User
 from bot.services.nutrition import parse_ai_response
 from bot.services.prompts import render_prompt
+from bot.services.embedding import build_meal_text, generate_embedding
 from bot.services.stats import (
     get_today_meals,
     get_today_totals,
@@ -341,6 +342,21 @@ async def handle_photo(
                 "carbs_max": old_total.get("carbs_max", 0) + total.get("carbs_max", 0),
             }
             existing_meal.ai_description = json.dumps(merged, ensure_ascii=False)
+
+            # Regenerate embedding with updated meal data
+            try:
+                emb_desc = merged.get("description", "") or caption or "Прием пищи"
+                emb_totals = {
+                    "calories": existing_meal.total_calories,
+                    "protein": existing_meal.total_protein,
+                    "fat": existing_meal.total_fat,
+                    "carbs": existing_meal.total_carbs,
+                }
+                all_items = merged.get("items", [])
+                emb_text = build_meal_text(emb_desc, all_items, emb_totals)
+                existing_meal.embedding = await generate_embedding(emb_text)
+            except Exception:
+                logger.warning("Failed to regenerate embedding for meal %d", existing_meal.id)
 
             await session.commit()
             await session.refresh(existing_meal)

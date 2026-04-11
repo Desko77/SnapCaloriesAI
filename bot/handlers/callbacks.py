@@ -341,6 +341,20 @@ async def refine_process_text(
             grams=item.get("grams"),
         ))
 
+    # Regenerate embedding after refinement
+    try:
+        desc = parsed.get("description", "") or meal.user_comment or "Прием пищи"
+        emb_totals = {
+            "calories": meal.total_calories,
+            "protein": meal.total_protein,
+            "fat": meal.total_fat,
+            "carbs": meal.total_carbs,
+        }
+        emb_text = build_meal_text(desc, items_data, emb_totals)
+        meal.embedding = await generate_embedding(emb_text)
+    except Exception:
+        logger.warning("Failed to regenerate embedding for meal %d", meal.id)
+
     await session.commit()
     await session.refresh(meal)
 
