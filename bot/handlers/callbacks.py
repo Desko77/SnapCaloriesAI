@@ -15,6 +15,7 @@ from bot.models.meal import MealLog, MealItem
 from bot.models.user import User
 from bot.services.nutrition import parse_ai_response
 from bot.services.prompts import render_prompt
+from bot.services.embedding import build_meal_text, generate_embedding
 from bot.services.stats import (
     get_today_meals,
     get_today_totals,
@@ -207,6 +208,27 @@ async def cb_confirm(
         return
 
     meal.is_confirmed = True
+
+    # Generate embedding for semantic search
+    try:
+        desc = ""
+        items_data = []
+        if meal.ai_description:
+            parsed = json.loads(meal.ai_description)
+            desc = parsed.get("description", "")
+            items_data = parsed.get("items", [])
+        desc = desc or meal.user_comment or "Прием пищи"
+        totals = {
+            "calories": meal.total_calories,
+            "protein": meal.total_protein,
+            "fat": meal.total_fat,
+            "carbs": meal.total_carbs,
+        }
+        text = build_meal_text(desc, items_data, totals)
+        meal.embedding = await generate_embedding(text)
+    except Exception:
+        logger.warning("Failed to generate embedding for meal %d", meal.id)
+
     await session.commit()
 
     try:

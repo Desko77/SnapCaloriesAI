@@ -228,6 +228,41 @@ async def get_weekly_summary_for_prompt(
     }
 
 
+async def search_similar_meals(
+    session: AsyncSession,
+    user_id: int,
+    query_embedding: list[float],
+    limit: int = 5,
+) -> list[MealLog]:
+    """Find similar meals by vector cosine similarity."""
+    result = await session.execute(
+        select(MealLog)
+        .where(
+            MealLog.user_id == user_id,
+            MealLog.is_confirmed == True,  # noqa: E712
+            MealLog.embedding.isnot(None),
+        )
+        .order_by(MealLog.embedding.cosine_distance(query_embedding))
+        .limit(limit)
+    )
+    return list(result.scalars().all())
+
+
+async def search_meals_by_text(
+    session: AsyncSession,
+    user_id: int,
+    query: str,
+    limit: int = 5,
+) -> list[MealLog]:
+    """Semantic search for meals by text query."""
+    from bot.services.embedding import generate_embedding
+
+    query_emb = await generate_embedding(query)
+    if query_emb is None:
+        return []
+    return await search_similar_meals(session, user_id, query_emb, limit)
+
+
 def format_today_meals_for_prompt(meals: list[MealLog]) -> list[dict[str, Any]]:
     """Format today's meals as compact dicts for the prompt."""
     result = []
