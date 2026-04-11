@@ -5,6 +5,8 @@ services:
       POSTGRES_DB: snapcalories
       POSTGRES_USER: snap
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-snap}
+    ports:
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     restart: unless-stopped
@@ -14,6 +16,7 @@ services:
       retries: 5
 
   bot:
+    image: desko77/snapcaloriesai:latest
     build: .
     env_file: .env
     environment:
