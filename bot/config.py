@@ -47,7 +47,11 @@ class Settings(BaseSettings):
     text_model: str = "openai/gpt-4.1-nano"
 
     # Database
-    database_url: str = "sqlite+aiosqlite:///data/snapcalories.db"
+    database_url: str = "postgresql+asyncpg://snap:snap@localhost:5432/snapcalories"
+
+    # Embedding (для векторного поиска)
+    embedding_model: str = "gemini-embedding-001"
+    embedding_dimensions: int = 768
 
 
 settings = Settings()

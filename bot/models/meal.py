@@ -1,9 +1,10 @@
 from datetime import datetime
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import ForeignKey, String, Float, Boolean, Text, DateTime, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from bot.config import now_local
+from bot.config import now_local, settings
 from bot.models.base import Base
 
 
@@ -24,6 +25,10 @@ class MealLog(Base):
     total_fat: Mapped[float] = mapped_column(Float, default=0)
     total_carbs: Mapped[float] = mapped_column(Float, default=0)
     portion_grams: Mapped[float | None] = mapped_column(Float)
+
+    embedding: Mapped[list[float] | None] = mapped_column(
+        Vector(settings.embedding_dimensions), nullable=True
+    )
 
     is_confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
     logged_at: Mapped[datetime] = mapped_column(DateTime, default=now_local)
