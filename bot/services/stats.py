@@ -263,6 +263,57 @@ async def search_meals_by_text(
     return await search_similar_meals(session, user_id, query_emb, limit)
 
 
+async def get_food_corrections(
+    session: AsyncSession, user_id: int, days: int = 30, limit: int = 5
+) -> list[dict[str, str]]:
+    """Extract food corrections from refined meals.
+
+    Compares original AI response (ai_raw_response) with current description
+    (ai_description) to find cases where user corrected product identification.
+    """
+    from bot.services.nutrition import parse_ai_response
+
+    since = today_local() - timedelta(days=days)
+
+    result = await session.execute(
+        select(MealLog)
+        .where(
+            MealLog.user_id == user_id,
+            MealLog.ai_raw_response.isnot(None),
+            MealLog.ai_description.isnot(None),
+            func.date(MealLog.logged_at) >= since,
+        )
+        .order_by(MealLog.logged_at.desc())
+        .limit(50)
+    )
+    meals = list(result.scalars().all())
+
+    corrections = []
+    for meal in meals:
+        try:
+            original = parse_ai_response(meal.ai_raw_response)
+            current = json.loads(meal.ai_description)
+        except Exception:
+            continue
+
+        if not isinstance(original, dict):
+            continue
+
+        original_names = [it.get("name") for it in original.get("items", []) if it.get("name")]
+        current_names = [it.get("name") for it in current.get("items", []) if it.get("name")]
+
+        if set(original_names) != set(current_names) and current_names:
+            corrections.append({
+                "original": ", ".join(original_names),
+                "corrected": ", ".join(current_names),
+            })
+
+        if len(corrections) >= limit:
+            break
+
+    return corrections
+
+
 def format_today_meals_for_prompt(meals: list[MealLog]) -> list[dict[str, Any]]:
     """Format today's meals as compact dicts for the prompt."""
     result = []

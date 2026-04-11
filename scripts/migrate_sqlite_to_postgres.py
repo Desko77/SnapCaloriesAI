@@ -43,6 +43,9 @@ async def migrate(sqlite_url: str, postgres_url: str) -> None:
 
     print("1. Creating schema in PostgreSQL...")
     async with pg_engine.begin() as conn:
+        # pgvector extension must be enabled BEFORE create_all,
+        # because MealLog model has Vector(768) column
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         await conn.run_sync(Base.metadata.create_all)
     print("   Done.")
 
@@ -59,11 +62,11 @@ async def migrate(sqlite_url: str, postgres_url: str) -> None:
             print(f"   {table_name}: empty, skipping")
             continue
 
-        # Filter out columns that don't exist in the target (e.g. embedding)
-        target_columns = {c.name for c in table.columns}
+        # Filter out columns that don't exist in source (e.g. embedding)
+        source_keys = set(dict(rows[0]).keys())
         cleaned_rows = []
         for r in rows:
-            cleaned = {k: v for k, v in dict(r).items() if k in target_columns}
+            cleaned = {k: v for k, v in dict(r).items() if k in source_keys}
             cleaned_rows.append(cleaned)
 
         # Write to PostgreSQL in batches
@@ -87,26 +90,40 @@ async def migrate(sqlite_url: str, postgres_url: str) -> None:
                 print(f"   Warning: could not sync sequence for {table_name}: {e}")
     print("   Done.")
 
-    print("\n4. Setting alembic_version...")
+    print("\n4. Verifying data integrity...")
+    async with sqlite_engine.connect() as src, pg_engine.connect() as dst:
+        all_ok = True
+        for table_name, model_class in TABLES_ORDER:
+            src_count = (await src.execute(text(f"SELECT COUNT(*) FROM {table_name}"))).scalar()
+            dst_count = (await dst.execute(text(f"SELECT COUNT(*) FROM {table_name}"))).scalar()
+            status = "OK" if src_count == dst_count else "MISMATCH!"
+            if src_count != dst_count:
+                all_ok = False
+            print(f"   {table_name}: SQLite={src_count}, PostgreSQL={dst_count} [{status}]")
+        if not all_ok:
+            print("\n   WARNING: Row counts don't match! Check data manually.")
+
+    print("\n5. Setting alembic_version...")
     async with pg_engine.begin() as conn:
+        # Set to HEAD (a1b2c3d4e5f6) since create_all already created
+        # the embedding column. alembic upgrade head will be a no-op.
+        head_revision = "a1b2c3d4e5f6"
         await conn.execute(text(
             "CREATE TABLE IF NOT EXISTS alembic_version "
             "(version_num VARCHAR(32) NOT NULL PRIMARY KEY)"
         ))
+        await conn.execute(text("DELETE FROM alembic_version"))
         await conn.execute(text(
-            f"INSERT INTO alembic_version (version_num) "
-            f"VALUES ('{LATEST_SQLITE_REVISION}') "
-            f"ON CONFLICT DO NOTHING"
+            f"INSERT INTO alembic_version (version_num) VALUES ('{head_revision}')"
         ))
-    print(f"   Set to {LATEST_SQLITE_REVISION}")
+    print(f"   Set to {head_revision} (HEAD)")
 
     await sqlite_engine.dispose()
     await pg_engine.dispose()
 
     print("\n--- Migration complete! ---")
     print("Next steps:")
-    print("  1. Run: uv run alembic upgrade head")
-    print("     (applies pgvector + embedding migration)")
+    print("  1. Update DATABASE_URL in .env to PostgreSQL URL")
     print("  2. Optionally run: uv run python scripts/backfill_embeddings.py")
     print("     (generates embeddings for existing meals)")
 

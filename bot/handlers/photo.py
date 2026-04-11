@@ -22,6 +22,7 @@ from bot.services.stats import (
     get_today_totals,
     get_weekly_summary_for_prompt,
     format_today_meals_for_prompt,
+    get_food_corrections,
     get_last_meal,
 )
 from bot.services.vision.base import VisionProvider
@@ -234,6 +235,7 @@ async def handle_photo(
     today_meals_raw = await get_today_meals(session, user.id)
     today_meals = format_today_meals_for_prompt(today_meals_raw)
     weekly_summary = await get_weekly_summary_for_prompt(session, user.id)
+    food_corrections = await get_food_corrections(session, user.id)
 
     user_profile = {
         "goal_type": GOAL_TYPE_LABELS.get(user.goal_type, user.goal_type),
@@ -263,6 +265,7 @@ async def handle_photo(
         today_totals=today_totals,
         today_meals=today_meals,
         weekly_summary=weekly_summary,
+        food_corrections=food_corrections,
         response_mode=user.response_mode,
     )
 
