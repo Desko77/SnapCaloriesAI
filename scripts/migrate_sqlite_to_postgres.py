@@ -53,21 +53,22 @@ async def migrate(sqlite_url: str, postgres_url: str) -> None:
     for table_name, model_class in TABLES_ORDER:
         table = model_class.__table__
 
-        # Read from SQLite
+        # Read from SQLite — only select columns that actually exist in source
         async with sqlite_engine.connect() as src:
-            result = await src.execute(table.select())
+            # Get actual column names from SQLite table
+            col_info = await src.execute(text(f"PRAGMA table_info({table_name})"))
+            sqlite_columns = {row[1] for row in col_info.fetchall()}
+            # Select only columns present in both model and SQLite
+            select_cols = [c for c in table.c if c.name in sqlite_columns]
+            from sqlalchemy import select as sa_select
+            result = await src.execute(sa_select(*select_cols))
             rows = result.mappings().all()
 
         if not rows:
             print(f"   {table_name}: empty, skipping")
             continue
 
-        # Filter out columns that don't exist in source (e.g. embedding)
-        source_keys = set(dict(rows[0]).keys())
-        cleaned_rows = []
-        for r in rows:
-            cleaned = {k: v for k, v in dict(r).items() if k in source_keys}
-            cleaned_rows.append(cleaned)
+        cleaned_rows = [dict(r) for r in rows]
 
         # Write to PostgreSQL in batches
         async with pg_engine.begin() as dst:
