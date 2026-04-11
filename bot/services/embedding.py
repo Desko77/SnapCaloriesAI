@@ -24,6 +24,7 @@ async def generate_embedding(text: str) -> list[float] | None:
         result = await client.aio.models.embed_content(
             model=settings.embedding_model,
             contents=text,
+            config={"output_dimensionality": settings.embedding_dimensions},
         )
         return list(result.embeddings[0].values)
     except Exception:
